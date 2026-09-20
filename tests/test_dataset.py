@@ -163,6 +163,55 @@ def test_write_splits_round_trips_and_writes_manifest(
     assert reloaded == original
 
 
+def hard_rows() -> list[dataset.Flow]:
+    names = ["normal", "normal", "normal", "neptune", "mscan", "apache2"]
+    hard = [
+        dataset.parse_line(i, make_line(name, difficulty=5) + "\n")
+        for i, name in enumerate(names)
+    ]
+    easy = [
+        dataset.parse_line(10 + i, make_line(name, difficulty=20) + "\n")
+        for i, name in enumerate(["normal", "neptune"])
+    ]
+    return [*hard, *easy]
+
+
+def test_draw_hard_split_is_balanced_filtered_disjoint_and_seeded() -> None:
+    rows = hard_rows()
+    drawn = dataset.draw_hard_split(rows, {0}, size=4, max_difficulty=10, seed=1)
+    assert len(drawn) == 4
+    assert sum(flow.is_attack for flow in drawn) == 2
+    assert all(flow.difficulty <= 10 for flow in drawn)
+    assert 0 not in {flow.row_id for flow in drawn}
+    assert drawn == dataset.draw_hard_split(
+        rows, {0}, size=4, max_difficulty=10, seed=1
+    )
+    with pytest.raises(ValueError, match="only 1 unused normal flows are hard enough"):
+        dataset.draw_hard_split(rows, {0, 1}, size=4, max_difficulty=10, seed=1)
+
+
+def test_write_hard_split_stays_disjoint_and_extends_the_manifest(
+    raw_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    splits_dir = tmp_path / "splits"
+    splits_dir.mkdir()
+    test = dataset.load_test(raw_dir)
+    dataset.write_split(test[:2], splits_dir / "internal.csv")
+    monkeypatch.setattr(dataset, "SPLIT_SIZES", {"internal": 2})
+    monkeypatch.setattr(dataset, "HARD_SPLIT_SIZE", 4)
+    monkeypatch.setattr(dataset, "HARD_MAX_DIFFICULTY", 21)
+
+    manifest_path = dataset.write_hard_split(raw_dir, splits_dir)
+
+    hard = dataset.load_split("hard", splits_dir)
+    assert len(hard) == 4
+    assert sum(flow.is_attack for flow in hard) == 2
+    assert {flow.row_id for flow in hard}.isdisjoint({0, 1})
+    manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["sizes"] == {"internal": 2, "hard": 4}
+    assert manifest["hard_split"] == {"max_difficulty": 21, "balanced_classes": True}
+
+
 def test_verify_checksums_accepts_unpinned_and_rejects_mismatch(
     raw_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

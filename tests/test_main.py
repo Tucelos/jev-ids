@@ -28,6 +28,22 @@ def test_split_prints_the_manifest(
     assert capsys.readouterr().out == '{"seed": 1}\n'
 
 
+def test_split_hard_draws_only_the_hard_split(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "SOURCE.json"
+    manifest.write_text('{"sizes": {"hard": 4}}\n', encoding="utf-8")
+    monkeypatch.setattr(dataset, "write_hard_split", lambda: manifest)
+    monkeypatch.setattr(dataset, "write_splits", must_not_run)
+    assert cli.main(["split", "--hard"]) == 0
+    assert capsys.readouterr().out == '{"sizes": {"hard": 4}}\n'
+
+
+def must_not_run() -> Path:
+    msg = "the proportional splits must not be redrawn by `split --hard`"
+    raise AssertionError(msg)
+
+
 def test_unknown_command_is_rejected() -> None:
     with pytest.raises(SystemExit):
         cli.main(["metrics"])

@@ -26,6 +26,7 @@ Managed with [uv](https://docs.astral.sh/uv/). Secrets live in `.env`
 ```bash
 uv run python -m somids download
 uv run python -m somids split
+uv run python -m somids split --hard   # balanced diagnostic split of hard flows
 uv run python -m somids run --detector jev --split internal --k 0,1,2,4,8,16 --seeds 0,1,2
 uv run python -m somids metrics results/<run_id>
 ```

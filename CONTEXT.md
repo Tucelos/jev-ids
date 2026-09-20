@@ -32,9 +32,14 @@ The number of Examples per Category given to a Detector. k = 0 is zero-shot;
 k = 4 means twenty Examples.
 
 **Split**:
-A frozen, seeded, proportional sample of KDDTest+. `internal` is for tuning,
-`paper` for reported results, `smoke` for exercising the pipeline. Splits are
-disjoint.
+A frozen, seeded sample of KDDTest+. `internal` is for tuning, `paper` for
+reported results, `smoke` for exercising the pipeline; these three are
+proportional. `hard` is a diagnostic sample, half attacks and half normals, of
+Flows with low Difficulty. Splits are disjoint.
+
+**Difficulty**:
+NSL-KDD's per-record count of classic learners, out of 21, that classified the
+record correctly. Low Difficulty means a hard Flow.
 _Avoid_: subset, sample, test set.
 
 ### Detection

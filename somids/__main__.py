@@ -29,8 +29,13 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands.add_parser(
         "download", help="fetch NSL-KDD from Kaggle and verify checksums"
     )
-    subcommands.add_parser(
+    splitter = subcommands.add_parser(
         "split", help="draw the internal, paper and smoke splits from KDDTest+"
+    )
+    splitter.add_argument(
+        "--hard",
+        action="store_true",
+        help="draw only the balanced hard split of low-difficulty flows",
     )
     runner = subcommands.add_parser("run", help="run one detector over one split")
     runner.add_argument(
@@ -85,6 +90,11 @@ def spec_from_args(args: argparse.Namespace) -> run.RunSpec:
     )
 
 
+def write_splits(hard: bool) -> Path:
+    """`split` draws the proportional splits; `split --hard` only the hard one."""
+    return dataset.write_hard_split() if hard else dataset.write_splits()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     load_dotenv(dataset.ROOT / ".env")
     args = build_parser().parse_args(argv)
@@ -92,8 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for name, digest in dataset.download().items():
             print(f"{name}: sha256 {digest}")
     elif args.command == "split":
-        manifest = dataset.write_splits()
-        print(manifest.read_text(encoding="utf-8"), end="")
+        print(write_splits(bool(args.hard)).read_text(encoding="utf-8"), end="")
     elif args.command == "run":
         run.run_from_spec(spec_from_args(args))
     elif args.command == "metrics":

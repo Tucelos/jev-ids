@@ -15,7 +15,7 @@ import random
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -152,6 +152,11 @@ ATTACK_CATEGORY: dict[str, Category] = {
 SPLIT_SIZES: dict[str, int] = {"internal": 50, "paper": 300, "smoke": 5}
 SPLIT_SEED = 20260920
 MIN_NOVEL_IN_PAPER = 30
+# Diagnostic split: half attacks, half normals, all with a low NSL-KDD difficulty
+# (the number of classic learners, out of 21, that classified the record right).
+HARD_SPLIT = "hard"
+HARD_SPLIT_SIZE = 100
+HARD_MAX_DIFFICULTY = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,6 +311,45 @@ def draw_splits(
     return splits
 
 
+def draw_hard_split(
+    test: Sequence[Flow],
+    used_ids: Collection[int],
+    size: int = HARD_SPLIT_SIZE,
+    max_difficulty: int = HARD_MAX_DIFFICULTY,
+    seed: int = SPLIT_SEED,
+) -> list[Flow]:
+    """Seeded balanced draw: `size // 2` attacks and as many normals, all with
+    difficulty <= `max_difficulty` and outside `used_ids`."""
+    pool = [
+        flow
+        for flow in test
+        if flow.difficulty <= max_difficulty and flow.row_id not in used_ids
+    ]
+    attacks = [flow for flow in pool if flow.is_attack]
+    normals = [flow for flow in pool if not flow.is_attack]
+    half = size // 2
+    return [
+        *_draw_class(attacks, half, seed, "attack"),
+        *_draw_class(normals, half, seed, "normal"),
+    ]
+
+
+def _draw_class(candidates: list[Flow], count: int, seed: int, kind: str) -> list[Flow]:
+    if len(candidates) < count:
+        msg = (
+            f"only {len(candidates)} unused {kind} flows are hard enough; "
+            f"the hard split needs {count}"
+        )
+        raise ValueError(msg)
+    random.Random(seed).shuffle(candidates)  # noqa: S311  # seeded, reproducible
+    return candidates[:count]
+
+
+def used_row_ids(splits_dir: Path, names: Iterable[str]) -> set[int]:
+    """Row ids already taken by the named split files."""
+    return {flow.row_id for name in names for flow in load_split(name, splits_dir)}
+
+
 SPLIT_HEADER: tuple[str, ...] = (
     "row_id",
     *COLUMNS,
@@ -351,14 +395,37 @@ def load_split(name: str, splits_dir: Path = SPLITS_DIR) -> list[Flow]:
 
 
 def write_splits(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path:
-    """Draw the three splits from Test+ and write them with a source manifest."""
+    """Draw the three proportional splits from Test+ and refresh the manifest."""
     splits = draw_splits(
         load_test(raw_dir), SPLIT_SIZES, SPLIT_SEED, MIN_NOVEL_IN_PAPER
     )
     splits_dir.mkdir(parents=True, exist_ok=True)
     for name, flows in splits.items():
         write_split(flows, splits_dir / f"{name}.csv")
-    manifest = {
+    return write_manifest(raw_dir, splits_dir)
+
+
+def write_hard_split(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path:
+    """Draw the hard split disjoint from the committed splits; refresh the manifest."""
+    used = used_row_ids(splits_dir, SPLIT_SIZES)
+    flows = draw_hard_split(
+        load_test(raw_dir), used, HARD_SPLIT_SIZE, HARD_MAX_DIFFICULTY, SPLIT_SEED
+    )
+    write_split(flows, splits_dir / f"{HARD_SPLIT}.csv")
+    return write_manifest(raw_dir, splits_dir)
+
+
+def split_names(splits_dir: Path) -> list[str]:
+    """Split files present on disk: the proportional ones first, then the rest."""
+    present = {path.stem for path in splits_dir.glob("*.csv")}
+    known = [name for name in SPLIT_SIZES if name in present]
+    return [*known, *sorted(present.difference(SPLIT_SIZES))]
+
+
+def write_manifest(raw_dir: Path, splits_dir: Path) -> Path:
+    """Describe every split file present in `splits_dir` in SOURCE.json."""
+    splits = {name: load_split(name, splits_dir) for name in split_names(splits_dir)}
+    manifest: dict[str, object] = {
         "dataset": KAGGLE_DATASET,
         "source_files": {
             name: sha256_of(resolve_raw(raw_dir, name)) for name in CHECKSUMS
@@ -372,6 +439,11 @@ def write_splits(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path
         "category_table_version": CATEGORY_TABLE_VERSION,
         "drawn_on": datetime.now(UTC).date().isoformat(),
     }
+    if HARD_SPLIT in splits:
+        manifest["hard_split"] = {
+            "max_difficulty": HARD_MAX_DIFFICULTY,
+            "balanced_classes": True,
+        }
     manifest_path = splits_dir / MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest_path

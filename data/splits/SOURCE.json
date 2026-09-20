@@ -8,13 +8,19 @@
   "sizes": {
     "internal": 50,
     "paper": 300,
-    "smoke": 5
+    "smoke": 5,
+    "hard": 100
   },
   "novel_attack_rows": {
     "internal": 11,
     "paper": 45,
-    "smoke": 0
+    "smoke": 0,
+    "hard": 22
   },
   "category_table_version": "2026-09-20",
-  "drawn_on": "2026-09-20"
+  "drawn_on": "2026-09-20",
+  "hard_split": {
+    "max_difficulty": 10,
+    "balanced_classes": true
+  }
 }
