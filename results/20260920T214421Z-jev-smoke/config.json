@@ -1,0 +1,35 @@
+{
+  "category_table_version": "2026-09-20",
+  "detector": "jev",
+  "jev_question_templates": {
+    "category": "Which category in `categories` does the connection `records.{rid}` belong to?",
+    "examples_clause": ", using the labeled `examples` as reference",
+    "is_attack": "Is the connection `records.{rid}` an intrusion attempt rather than normal traffic? Judge it by `instructions` and `columns`{examples_clause}."
+  },
+  "model": "typesafe-ai/jev",
+  "prices_date": "2026-09-20",
+  "prompt": {
+    "sha256": "cacc5cfdf588d0fe4e60f078d0c7c9b1a10a37dbf9715062e9c3d7ef86f312fa",
+    "version": "v1"
+  },
+  "run_id": "20260920T214421Z-jev-smoke",
+  "spec": {
+    "allow_paper": false,
+    "batch": 1,
+    "detector": "jev",
+    "fmt": "csv",
+    "ks": [
+      0,
+      1
+    ],
+    "model": null,
+    "prompt_version": "v1",
+    "reps": 1,
+    "resume": null,
+    "seeds": [
+      0
+    ],
+    "split": "smoke"
+  },
+  "started_at": "2026-09-20T21:44:21+00:00"
+}
