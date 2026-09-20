@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-20",
+  "unit": "USD per 1M tokens",
+  "models": {
+    "typesafe-ai/jev": {
+      "input": 0.042,
+      "cached_input": null,
+      "output": 0.0,
+      "source": "https://vercel.com/ai-gateway/models/jev",
+      "note": "List price; billed 0 under the promotion that ends on 2026-09-25."
+    },
+    "deepseek-flash": {
+      "input": 0.3,
+      "cached_input": 0.006,
+      "output": 1.2,
+      "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "note": "Peak list prices; off-peak is half (peak: 01:00-04:00 and 06:00-10:00 UTC, Mon-Fri)."
+    },
+    "gpt-5.6-luna": {
+      "input": 0.2,
+      "cached_input": 0.02,
+      "output": 1.2,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "note": "Public API list price, used as the cost proxy for the subscription path (billed 0)."
+    },
+    "gpt-5.6-terra": {
+      "input": 2.0,
+      "cached_input": 0.2,
+      "output": 12.0,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "note": "Public API list price; fallback model if the Codex backend refuses luna on a Free account."
+    }
+  }
+}

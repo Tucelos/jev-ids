@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.venv/
+.ruff_cache/
+.complexipy_cache/
+.pytest_cache/
+.coverage
+.DS_Store
+data/*
+!data/splits/
+results/*/responses.jsonl

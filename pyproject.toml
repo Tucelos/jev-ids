@@ -1,0 +1,54 @@
+[project]
+name = "somids"
+version = "0.1.0"
+description = "System One Model (Jev) based intrusion detection: pilot scripts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.2.3",
+    "requests>=2.34.2",
+]
+
+# --- quality gate (added by /quality-init); thresholds live here ---
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PL", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 7
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-branches = 7
+max-returns = 4
+max-statements = 30
+
+[tool.pyright]
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+addopts = "--cov --cov-fail-under=80"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.vulture]
+paths = ["."]
+exclude = [".venv/", "tests/"]
+min_confidence = 80
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "types-requests>=2.33.0.20260906",
+    "vulture>=2.16",
+]
