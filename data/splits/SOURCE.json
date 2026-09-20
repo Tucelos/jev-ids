@@ -1,0 +1,20 @@
+{
+  "dataset": "hassan06/nslkdd",
+  "source_files": {
+    "KDDTrain+.txt": "1b86d2f957b33082081bba410fe129b475efebcc13c9014c3f447c8271aadf95",
+    "KDDTest+.txt": "fa46b0935342616aa83b7c2578db355b6a7aaabbc492248172c7a1e8b7ab8f84"
+  },
+  "seed": 20260920,
+  "sizes": {
+    "internal": 50,
+    "paper": 300,
+    "smoke": 5
+  },
+  "novel_attack_rows": {
+    "internal": 11,
+    "paper": 45,
+    "smoke": 0
+  },
+  "category_table_version": "2026-09-20",
+  "drawn_on": "2026-09-20"
+}

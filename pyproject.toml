@@ -46,6 +46,7 @@ min_confidence = 80
 
 [dependency-groups]
 dev = [
+    "kaggle>=2.2.4",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
