@@ -69,3 +69,7 @@ def test_metrics_passes_the_run_directories(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(metrics, "report", fake_report)
     assert cli.main(["metrics", "results/a", "results/b", "--out", "x.csv"]) == 0
     assert seen == [([Path("results/a"), Path("results/b")], Path("x.csv"))]
+
+
+def test_k_accepts_all() -> None:
+    assert cli.parse_ks("0,1, all") == (0, 1, None)

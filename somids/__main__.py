@@ -11,6 +11,12 @@ from somids import dataset, metrics, run
 from somids.dataset import RowFormat
 
 
+def parse_ks(text: str) -> tuple[int | None, ...]:
+    """`--k 0,1,2,all`: integers, plus `all` for the whole Train+ (Random Forest)."""
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    return tuple(None if part == "all" else int(part) for part in parts)
+
+
 def _ints(text: str) -> tuple[int, ...]:
     return tuple(int(part) for part in text.split(",") if part.strip())
 
@@ -31,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--split", required=True, help="internal, paper or smoke")
     runner.add_argument(
         "--k",
-        type=_ints,
+        type=parse_ks,
         default=(0, 1, 2, 4, 8, 16),
         help="examples per category, comma separated",
     )

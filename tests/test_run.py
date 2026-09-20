@@ -147,14 +147,14 @@ def test_progress_line_counts_errors_and_cost() -> None:
     assert progress.line() == "calls=1 predictions=1 errors=0 list_cost_usd=0.5000"
 
 
-def test_build_detector_knows_jev_only_for_now() -> None:
+def test_build_detector_knows_jev_and_rejects_unknown_names() -> None:
     prompt = load_prompt("v1")
     assert (
         run.build_detector(run.RunSpec("jev", "smoke", (0,), (0,)), prompt).name
         == "jev"
     )
     with pytest.raises(NotImplementedError):
-        run.build_detector(run.RunSpec("rf", "smoke", (0,), (0,)), prompt)
+        run.build_detector(run.RunSpec("llm:deepseek", "smoke", (0,), (0,)), prompt)
 
 
 def test_chunks_and_run_id() -> None:
@@ -165,3 +165,25 @@ def test_chunks_and_run_id() -> None:
         run.make_run_id(spec, datetime(2026, 9, 20, 18, 0, 0, tzinfo=UTC))
         == "20260920T180000Z-llm-deepseek-internal"
     )
+
+
+def test_k_all_uses_every_train_flow_and_is_rf_only(tmp_path: Path) -> None:
+    examples = run.examples_for(TRAIN, None, seed=0)
+    assert len(examples) == len(TRAIN)
+    assert run.examples_for(TRAIN, 0, seed=0) == []
+    spec = run.RunSpec(detector="fake", split="smoke", ks=(None,), seeds=(0,))
+    with pytest.raises(ValueError, match="only meaningful for the Random Forest"):
+        run.execute(
+            spec, FakeDetector(), load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
+        )
+
+
+def test_rf_cannot_start_at_zero_shot() -> None:
+    class RfLike(FakeDetector):
+        @property
+        def name(self) -> str:
+            return "rf"
+
+    spec = run.RunSpec(detector="rf", split="smoke", ks=(0, 1), seeds=(0,))
+    with pytest.raises(ValueError, match="starts at k = 1"):
+        run.check_ks(spec, RfLike())

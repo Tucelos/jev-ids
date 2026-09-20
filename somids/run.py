@@ -13,7 +13,7 @@ from typing import Any
 
 from somids import dataset
 from somids.dataset import Example, Flow, RowFormat
-from somids.detectors import jev
+from somids.detectors import jev, random_forest
 from somids.detectors.base import Detector, Outcome
 from somids.prices import load_prices
 from somids.prompt import Prompt, load_prompt
@@ -29,7 +29,7 @@ class RunSpec:
 
     detector: str
     split: str
-    ks: tuple[int, ...]
+    ks: tuple[int | None, ...]  # None = all of Train+ (Random Forest only)
     seeds: tuple[int, ...]
     reps: int = 1
     batch: int = 1
@@ -52,9 +52,10 @@ class RunData:
 class Cell:
     """One (k, seed, rep) combination of the run."""
 
-    k: int
+    k: int | None
     seed: int
     rep: int
+    n_examples: int
 
 
 @dataclass(slots=True)
@@ -95,8 +96,21 @@ def make_run_id(spec: RunSpec, now: datetime) -> str:
 def build_detector(spec: RunSpec, prompt: Prompt) -> Detector:
     if spec.detector == "jev":
         return jev.JevDetector(prompt=prompt, fmt=spec.fmt)
+    if spec.detector == "rf":
+        vocabulary = random_forest.Vocabulary.from_flows(dataset.load_train())
+        return random_forest.RandomForestDetector(vocabulary)
     msg = f"detector {spec.detector!r} is not implemented yet"
     raise NotImplementedError(msg)
+
+
+def check_ks(spec: RunSpec, detector: Detector) -> None:
+    """k = all exists only for the Random Forest, which in turn cannot take k = 0."""
+    if None in spec.ks and detector.name != "rf":
+        msg = "k = all is only meaningful for the Random Forest"
+        raise ValueError(msg)
+    if detector.name == "rf" and 0 in spec.ks:
+        msg = "the Random Forest starts at k = 1"
+        raise ValueError(msg)
 
 
 def chunks(flows: Sequence[Flow], size: int) -> Iterator[Sequence[Flow]]:
@@ -149,6 +163,7 @@ def execute(
     if spec.split == "paper" and not spec.allow_paper:
         msg = "the paper split needs --allow-paper"
         raise PermissionError(msg)
+    check_ks(spec, detector)
     plan = _prepare(spec, detector, prompt, data or RunData(), results_dir)
     for k, seed in itertools.product(spec.ks, spec.seeds):
         _run_k_seed(plan, k, seed)
@@ -171,12 +186,16 @@ def _prepare(
     )
 
 
-def _run_k_seed(plan: Plan, k: int, seed: int) -> None:
+def _run_k_seed(plan: Plan, k: int | None, seed: int) -> None:
     """Every rep of one (k, seed): the Examples are drawn once and reused."""
-    examples = dataset.sample_examples(plan.train, k, seed) if k else []
+    examples = examples_for(plan.train, k, seed)
     for rep in range(plan.spec.reps):
         context = _context(
-            plan.spec, plan.run_id, plan.detector, Cell(k, seed, rep), plan.prompt
+            plan.spec,
+            plan.run_id,
+            plan.detector,
+            Cell(k, seed, rep, len(examples)),
+            plan.prompt,
         )
         pending = [
             f for f in plan.flows if (f.row_id, k, seed, rep) not in plan.state.done
@@ -187,7 +206,14 @@ def _run_k_seed(plan: Plan, k: int, seed: int) -> None:
 def _train_if_needed(spec: RunSpec, train: Sequence[Flow] | None) -> Sequence[Flow]:
     if train is not None:
         return train
-    return dataset.load_train() if any(spec.ks) else []
+    return dataset.load_train() if any(k != 0 for k in spec.ks) else []
+
+
+def examples_for(train: Sequence[Flow], k: int | None, seed: int) -> list[Example]:
+    """k Examples per Category; None means every Train+ Flow, labeled."""
+    if k is None:
+        return [Example(flow, flow.category) for flow in train]
+    return dataset.sample_examples(train, k, seed) if k else []
 
 
 def _context(
@@ -198,7 +224,7 @@ def _context(
         detector=detector.name,
         split=spec.split,
         k=cell.k,
-        n_examples=cell.k * len(dataset.CATEGORIES),
+        n_examples=cell.n_examples,
         seed=cell.seed,
         rep=cell.rep,
         batch=spec.batch,
