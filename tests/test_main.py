@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from somids import __main__ as cli
-from somids import dataset, run
+from somids import dataset, metrics, run
 
 
 def test_download_prints_digests(
@@ -57,3 +57,15 @@ def test_run_builds_a_spec_from_the_arguments(monkeypatch: pytest.MonkeyPatch) -
     assert seen == [
         run.RunSpec("jev", "smoke", (0, 4), (1,), reps=3, batch=1, fmt="kv")
     ]
+
+
+def test_metrics_passes_the_run_directories(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[list[Path], Path | None]] = []
+
+    def fake_report(run_dirs: list[Path], out: Path | None) -> Path:
+        seen.append((run_dirs, out))
+        return Path("summary.csv")
+
+    monkeypatch.setattr(metrics, "report", fake_report)
+    assert cli.main(["metrics", "results/a", "results/b", "--out", "x.csv"]) == 0
+    assert seen == [([Path("results/a"), Path("results/b")], Path("x.csv"))]

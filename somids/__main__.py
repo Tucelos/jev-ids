@@ -1,14 +1,13 @@
-"""CLI entry point: `python -m somids <download|split|run>`; `metrics` lands
-with its module.
-"""
+"""CLI entry point: `python -m somids <download|split|run|metrics>`."""
 
 from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 from typing import cast
 
-from somids import dataset, run
+from somids import dataset, metrics, run
 from somids.dataset import RowFormat
 
 
@@ -52,6 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument(
         "--allow-paper", action="store_true", help="required to touch the paper split"
     )
+    reporter = subcommands.add_parser("metrics", help="summarize one or more runs")
+    reporter.add_argument(
+        "run_dirs", nargs="+", type=Path, help="results/<run_id> directories"
+    )
+    reporter.add_argument(
+        "--out", type=Path, default=None, help="where to write summary.csv"
+    )
     return parser
 
 
@@ -81,6 +87,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(manifest.read_text(encoding="utf-8"), end="")
     elif args.command == "run":
         run.run_from_spec(spec_from_args(args))
+    elif args.command == "metrics":
+        metrics.report(list(args.run_dirs), args.out)
     return 0
 
 
