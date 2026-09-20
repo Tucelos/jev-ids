@@ -176,40 +176,51 @@ def hard_rows() -> list[dataset.Flow]:
     return [*hard, *easy]
 
 
-def test_draw_hard_split_is_balanced_filtered_disjoint_and_seeded() -> None:
+def test_draw_band_split_is_balanced_filtered_disjoint_and_seeded() -> None:
     rows = hard_rows()
-    drawn = dataset.draw_hard_split(rows, {0}, size=4, max_difficulty=10, seed=1)
+    band = dataset.Band(size=4, min_difficulty=0, max_difficulty=10)
+    drawn = dataset.draw_band_split(rows, {0}, band, seed=1)
     assert len(drawn) == 4
     assert sum(flow.is_attack for flow in drawn) == 2
     assert all(flow.difficulty <= 10 for flow in drawn)
     assert 0 not in {flow.row_id for flow in drawn}
-    assert drawn == dataset.draw_hard_split(
-        rows, {0}, size=4, max_difficulty=10, seed=1
-    )
-    with pytest.raises(ValueError, match="only 1 unused normal flows are hard enough"):
-        dataset.draw_hard_split(rows, {0, 1}, size=4, max_difficulty=10, seed=1)
+    assert drawn == dataset.draw_band_split(rows, {0}, band, seed=1)
+    with pytest.raises(ValueError, match="only 1 unused normal flows in the band"):
+        dataset.draw_band_split(rows, {0, 1}, band, seed=1)
 
 
-def test_write_hard_split_stays_disjoint_and_extends_the_manifest(
+def test_draw_band_split_respects_the_lower_bound() -> None:
+    band = dataset.Band(size=2, min_difficulty=11, max_difficulty=21)
+    drawn = dataset.draw_band_split(hard_rows(), set(), band, seed=1)
+    assert {flow.difficulty for flow in drawn} == {20}
+
+
+def test_write_band_split_stays_disjoint_and_extends_the_manifest(
     raw_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     splits_dir = tmp_path / "splits"
     splits_dir.mkdir()
     test = dataset.load_test(raw_dir)
-    dataset.write_split(test[:2], splits_dir / "internal.csv")
-    monkeypatch.setattr(dataset, "SPLIT_SIZES", {"internal": 2})
-    monkeypatch.setattr(dataset, "HARD_SPLIT_SIZE", 4)
-    monkeypatch.setattr(dataset, "HARD_MAX_DIFFICULTY", 21)
+    dataset.write_split(test[:1], splits_dir / "internal.csv")
+    dataset.write_split(test[1:2], splits_dir / "hard.csv")
+    monkeypatch.setattr(dataset, "SPLIT_SIZES", {"internal": 1})
+    band = dataset.Band(size=4, min_difficulty=0, max_difficulty=21)
+    monkeypatch.setattr(dataset, "BANDS", {"hard": band, "mid": band})
 
-    manifest_path = dataset.write_hard_split(raw_dir, splits_dir)
+    manifest_path = dataset.write_band_split("mid", raw_dir, splits_dir)
 
-    hard = dataset.load_split("hard", splits_dir)
-    assert len(hard) == 4
-    assert sum(flow.is_attack for flow in hard) == 2
-    assert {flow.row_id for flow in hard}.isdisjoint({0, 1})
+    mid = dataset.load_split("mid", splits_dir)
+    assert len(mid) == 4
+    assert sum(flow.is_attack for flow in mid) == 2
+    assert {flow.row_id for flow in mid}.isdisjoint({0, 1})
     manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["sizes"] == {"internal": 2, "hard": 4}
-    assert manifest["hard_split"] == {"max_difficulty": 21, "balanced_classes": True}
+    assert manifest["sizes"] == {"internal": 1, "hard": 1, "mid": 4}
+    assert set(manifest["bands"]) == {"hard", "mid"}
+    assert manifest["bands"]["mid"] == {
+        "min_difficulty": 0,
+        "max_difficulty": 21,
+        "balanced_classes": True,
+    }
 
 
 def test_verify_checksums_accepts_unpinned_and_rejects_mismatch(

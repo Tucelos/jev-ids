@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from somids import __main__ as cli
-from somids import dataset, metrics, run
+from somids import compare, dataset, metrics, run
 
 
 def test_download_prints_digests(
@@ -28,20 +28,41 @@ def test_split_prints_the_manifest(
     assert capsys.readouterr().out == '{"seed": 1}\n'
 
 
-def test_split_hard_draws_only_the_hard_split(
+def test_split_band_draws_only_that_band(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     manifest = tmp_path / "SOURCE.json"
-    manifest.write_text('{"sizes": {"hard": 4}}\n', encoding="utf-8")
-    monkeypatch.setattr(dataset, "write_hard_split", lambda: manifest)
+    manifest.write_text('{"sizes": {"mid": 4}}\n', encoding="utf-8")
+    seen: list[str] = []
+
+    def fake_band(name: str) -> Path:
+        seen.append(name)
+        return manifest
+
+    monkeypatch.setattr(dataset, "write_band_split", fake_band)
     monkeypatch.setattr(dataset, "write_splits", must_not_run)
-    assert cli.main(["split", "--hard"]) == 0
-    assert capsys.readouterr().out == '{"sizes": {"hard": 4}}\n'
+    assert cli.main(["split", "--band", "mid"]) == 0
+    assert seen == ["mid"]
+    assert capsys.readouterr().out == '{"sizes": {"mid": 4}}\n'
 
 
 def must_not_run() -> Path:
-    msg = "the proportional splits must not be redrawn by `split --hard`"
+    msg = "the proportional splits must not be redrawn by `split --band`"
     raise AssertionError(msg)
+
+
+def test_compare_passes_both_runs_and_the_resamples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[tuple[Path, Path, int]] = []
+
+    def fake_report(run_a: Path, run_b: Path, resamples: int) -> list[object]:
+        seen.append((run_a, run_b, resamples))
+        return []
+
+    monkeypatch.setattr(compare, "report", fake_report)
+    assert cli.main(["compare", "results/a", "results/b", "--bootstrap", "10"]) == 0
+    assert seen == [(Path("results/a"), Path("results/b"), 10)]
 
 
 def test_unknown_command_is_rejected() -> None:

@@ -34,12 +34,16 @@ k = 4 means twenty Examples.
 **Split**:
 A frozen, seeded sample of KDDTest+. `internal` is for tuning, `paper` for
 reported results, `smoke` for exercising the pipeline; these three are
-proportional. `hard` is a diagnostic sample, half attacks and half normals, of
-Flows with low Difficulty. Splits are disjoint.
+proportional. `hard` and `mid` are diagnostic samples, half attacks and half
+normals, of Flows inside a band of Difficulty. Splits are disjoint.
 
 **Difficulty**:
 NSL-KDD's per-record count of classic learners, out of 21, that classified the
 record correctly. Low Difficulty means a hard Flow.
+
+**Discordant pair**:
+One Flow judged by two Detectors that gave different Verdicts. Only discordant
+pairs tell two Detectors apart.
 _Avoid_: subset, sample, test set.
 
 ### Detection

@@ -185,7 +185,7 @@ def load_predictions(run_dirs: Iterable[Path]) -> list[Prediction]:
     return predictions
 
 
-def _cell(value: object) -> str:
+def format_cell(value: object) -> str:
     if value is None:
         return "-"
     if isinstance(value, float):
@@ -198,7 +198,7 @@ def to_markdown(summaries: Sequence[Summary]) -> str:
     rule = "|" + "|".join(" --- " for _ in TABLE_COLUMNS) + "|"
     rows = [
         "| "
-        + " | ".join(_cell(getattr(summary, column)) for column in TABLE_COLUMNS)
+        + " | ".join(format_cell(getattr(summary, column)) for column in TABLE_COLUMNS)
         + " |"
         for summary in summaries
     ]

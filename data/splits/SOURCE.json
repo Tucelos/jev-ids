@@ -9,18 +9,28 @@
     "internal": 50,
     "paper": 300,
     "smoke": 5,
-    "hard": 100
+    "hard": 100,
+    "mid": 240
   },
   "novel_attack_rows": {
     "internal": 11,
     "paper": 45,
     "smoke": 0,
-    "hard": 22
+    "hard": 22,
+    "mid": 72
   },
   "category_table_version": "2026-09-20",
   "drawn_on": "2026-09-20",
-  "hard_split": {
-    "max_difficulty": 10,
-    "balanced_classes": true
+  "bands": {
+    "hard": {
+      "min_difficulty": 0,
+      "max_difficulty": 10,
+      "balanced_classes": true
+    },
+    "mid": {
+      "min_difficulty": 11,
+      "max_difficulty": 17,
+      "balanced_classes": true
+    }
   }
 }

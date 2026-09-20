@@ -152,11 +152,24 @@ ATTACK_CATEGORY: dict[str, Category] = {
 SPLIT_SIZES: dict[str, int] = {"internal": 50, "paper": 300, "smoke": 5}
 SPLIT_SEED = 20260920
 MIN_NOVEL_IN_PAPER = 30
-# Diagnostic split: half attacks, half normals, all with a low NSL-KDD difficulty
-# (the number of classic learners, out of 21, that classified the record right).
-HARD_SPLIT = "hard"
-HARD_SPLIT_SIZE = 100
-HARD_MAX_DIFFICULTY = 10
+
+
+@dataclass(frozen=True, slots=True)
+class Band:
+    """A diagnostic split: half attacks, half normals, all inside a band of
+    NSL-KDD difficulty (how many of 21 classic learners got the record right)."""
+
+    size: int
+    min_difficulty: int
+    max_difficulty: int
+
+
+BANDS: dict[str, Band] = {
+    # features point most learners the wrong way
+    "hard": Band(size=100, min_difficulty=0, max_difficulty=10),
+    # learners split; where two Detectors disagree the most
+    "mid": Band(size=240, min_difficulty=11, max_difficulty=17),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,23 +324,23 @@ def draw_splits(
     return splits
 
 
-def draw_hard_split(
+def draw_band_split(
     test: Sequence[Flow],
     used_ids: Collection[int],
-    size: int = HARD_SPLIT_SIZE,
-    max_difficulty: int = HARD_MAX_DIFFICULTY,
+    band: Band,
     seed: int = SPLIT_SEED,
 ) -> list[Flow]:
-    """Seeded balanced draw: `size // 2` attacks and as many normals, all with
-    difficulty <= `max_difficulty` and outside `used_ids`."""
+    """Seeded balanced draw inside a difficulty band: `band.size // 2` attacks
+    and as many normals, none of them in `used_ids`."""
     pool = [
         flow
         for flow in test
-        if flow.difficulty <= max_difficulty and flow.row_id not in used_ids
+        if band.min_difficulty <= flow.difficulty <= band.max_difficulty
+        and flow.row_id not in used_ids
     ]
     attacks = [flow for flow in pool if flow.is_attack]
     normals = [flow for flow in pool if not flow.is_attack]
-    half = size // 2
+    half = band.size // 2
     return [
         *_draw_class(attacks, half, seed, "attack"),
         *_draw_class(normals, half, seed, "normal"),
@@ -337,8 +350,8 @@ def draw_hard_split(
 def _draw_class(candidates: list[Flow], count: int, seed: int, kind: str) -> list[Flow]:
     if len(candidates) < count:
         msg = (
-            f"only {len(candidates)} unused {kind} flows are hard enough; "
-            f"the hard split needs {count}"
+            f"only {len(candidates)} unused {kind} flows in the band; "
+            f"the split needs {count}"
         )
         raise ValueError(msg)
     random.Random(seed).shuffle(candidates)  # noqa: S311  # seeded, reproducible
@@ -405,13 +418,16 @@ def write_splits(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path
     return write_manifest(raw_dir, splits_dir)
 
 
-def write_hard_split(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path:
-    """Draw the hard split disjoint from the committed splits; refresh the manifest."""
-    used = used_row_ids(splits_dir, SPLIT_SIZES)
-    flows = draw_hard_split(
-        load_test(raw_dir), used, HARD_SPLIT_SIZE, HARD_MAX_DIFFICULTY, SPLIT_SEED
+def write_band_split(
+    name: str, raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR
+) -> Path:
+    """Draw one diagnostic split disjoint from every other split file present,
+    then refresh the manifest."""
+    others = [other for other in split_names(splits_dir) if other != name]
+    flows = draw_band_split(
+        load_test(raw_dir), used_row_ids(splits_dir, others), BANDS[name], SPLIT_SEED
     )
-    write_split(flows, splits_dir / f"{HARD_SPLIT}.csv")
+    write_split(flows, splits_dir / f"{name}.csv")
     return write_manifest(raw_dir, splits_dir)
 
 
@@ -420,6 +436,18 @@ def split_names(splits_dir: Path) -> list[str]:
     present = {path.stem for path in splits_dir.glob("*.csv")}
     known = [name for name in SPLIT_SIZES if name in present]
     return [*known, *sorted(present.difference(SPLIT_SIZES))]
+
+
+def _bands_present(splits: Mapping[str, Sequence[Flow]]) -> dict[str, object]:
+    return {
+        name: {
+            "min_difficulty": band.min_difficulty,
+            "max_difficulty": band.max_difficulty,
+            "balanced_classes": True,
+        }
+        for name, band in BANDS.items()
+        if name in splits
+    }
 
 
 def write_manifest(raw_dir: Path, splits_dir: Path) -> Path:
@@ -439,11 +467,7 @@ def write_manifest(raw_dir: Path, splits_dir: Path) -> Path:
         "category_table_version": CATEGORY_TABLE_VERSION,
         "drawn_on": datetime.now(UTC).date().isoformat(),
     }
-    if HARD_SPLIT in splits:
-        manifest["hard_split"] = {
-            "max_difficulty": HARD_MAX_DIFFICULTY,
-            "balanced_classes": True,
-        }
+    manifest["bands"] = _bands_present(splits)
     manifest_path = splits_dir / MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest_path
