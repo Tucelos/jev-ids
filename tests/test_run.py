@@ -154,7 +154,7 @@ def test_build_detector_knows_jev_and_rejects_unknown_names() -> None:
         == "jev"
     )
     with pytest.raises(NotImplementedError):
-        run.build_detector(run.RunSpec("llm:deepseek", "smoke", (0,), (0,)), prompt)
+        run.build_detector(run.RunSpec("unknown", "smoke", (0,), (0,)), prompt)
 
 
 def test_chunks_and_run_id() -> None:
@@ -187,3 +187,16 @@ def test_rf_cannot_start_at_zero_shot() -> None:
     spec = run.RunSpec(detector="rf", split="smoke", ks=(0, 1), seeds=(0,))
     with pytest.raises(ValueError, match="starts at k = 1"):
         run.check_ks(spec, RfLike())
+
+
+def test_build_detector_knows_the_llm_providers() -> None:
+    prompt = load_prompt("v1")
+    deepseek = run.build_detector(
+        run.RunSpec("llm:deepseek", "smoke", (0,), (0,)), prompt
+    )
+    assert deepseek.name == "llm:deepseek"
+    assert deepseek.model == "deepseek-flash"
+    luna = run.build_detector(
+        run.RunSpec("llm:chatgpt", "smoke", (0,), (0,), model="gpt-5.6-terra"), prompt
+    )
+    assert luna.model == "gpt-5.6-terra"

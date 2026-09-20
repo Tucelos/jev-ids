@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
+from dotenv import load_dotenv
+
 from somids import dataset, metrics, run
 from somids.dataset import RowFormat
 
@@ -84,6 +86,7 @@ def spec_from_args(args: argparse.Namespace) -> run.RunSpec:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    load_dotenv(dataset.ROOT / ".env")
     args = build_parser().parse_args(argv)
     if args.command == "download":
         for name, digest in dataset.download().items():

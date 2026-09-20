@@ -13,7 +13,7 @@ from typing import Any
 
 from somids import dataset
 from somids.dataset import Example, Flow, RowFormat
-from somids.detectors import jev, random_forest
+from somids.detectors import chatgpt, jev, llm, random_forest
 from somids.detectors.base import Detector, Outcome
 from somids.prices import load_prices
 from somids.prompt import Prompt, load_prompt
@@ -99,6 +99,13 @@ def build_detector(spec: RunSpec, prompt: Prompt) -> Detector:
     if spec.detector == "rf":
         vocabulary = random_forest.Vocabulary.from_flows(dataset.load_train())
         return random_forest.RandomForestDetector(vocabulary)
+    if spec.detector in ("llm:deepseek", "llm:chatgpt"):
+        provider: llm.Provider = (
+            "deepseek" if spec.detector == "llm:deepseek" else "chatgpt"
+        )
+        model_id = spec.model or llm.DEFAULT_MODEL[provider]
+        price = load_prices().for_model(model_id)
+        return llm.LLMDetector(prompt, provider, price, model_id=model_id, fmt=spec.fmt)
     msg = f"detector {spec.detector!r} is not implemented yet"
     raise NotImplementedError(msg)
 
@@ -132,6 +139,12 @@ def run_config(
             "is_attack": jev.IS_ATTACK_TEMPLATE,
             "category": jev.CATEGORY_TEMPLATE,
             "examples_clause": jev.EXAMPLES_CLAUSE,
+        },
+        "llm_instructions_template": llm.INSTRUCTIONS_TEMPLATE,
+        "chatgpt_preambles": {
+            "neutral": chatgpt.NEUTRAL_PREAMBLE,
+            "fallback": chatgpt.CODEX_PREAMBLE,
+            "note": "the preamble actually sent is stored with each raw response",
         },
         "category_table_version": dataset.CATEGORY_TABLE_VERSION,
         "prices_date": load_prices().date,

@@ -5,6 +5,7 @@ description = "System One Model (Jev) based intrusion detection: pilot scripts"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "agno[openai]>=3.0.10",
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
