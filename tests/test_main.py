@@ -51,18 +51,54 @@ def must_not_run() -> Path:
     raise AssertionError(msg)
 
 
-def test_compare_passes_both_runs_and_the_resamples(
+Seen = tuple[Path, Path, int, str, tuple[int | None, int | None] | None]
+
+
+def test_compare_passes_runs_resamples_subset_and_ks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seen: list[tuple[Path, Path, int]] = []
+    seen: list[Seen] = []
 
-    def fake_report(run_a: Path, run_b: Path, resamples: int) -> list[object]:
-        seen.append((run_a, run_b, resamples))
+    def fake_report(
+        run_a: Path,
+        run_b: Path,
+        resamples: int,
+        subset: str,
+        ks: tuple[int | None, int | None] | None,
+    ) -> list[object]:
+        seen.append((run_a, run_b, resamples, subset, ks))
         return []
 
     monkeypatch.setattr(compare, "report", fake_report)
     assert cli.main(["compare", "results/a", "results/b", "--bootstrap", "10"]) == 0
-    assert seen == [(Path("results/a"), Path("results/b"), 10)]
+    argv = ["compare", "a", "b", "--subset", "novel", "--k-a", "0", "--k-b", "all"]
+    assert cli.main(argv) == 0
+    assert seen == [
+        (Path("results/a"), Path("results/b"), 10, "all", None),
+        (Path("a"), Path("b"), 2000, "novel", (0, None)),
+    ]
+    with pytest.raises(SystemExit, match="come together"):
+        cli.main(["compare", "a", "b", "--k-a", "0"])
+
+
+def test_split_proportional_draws_only_that_split(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "SOURCE.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    seen: list[str] = []
+
+    def fake_proportional(name: str) -> Path:
+        seen.append(name)
+        return manifest
+
+    monkeypatch.setattr(dataset, "write_proportional_split", fake_proportional)
+    monkeypatch.setattr(dataset, "write_splits", must_not_run)
+    assert cli.main(["split", "--proportional", "pilot"]) == 0
+    assert seen == ["pilot"]
+    assert capsys.readouterr().out == "{}\n"
+    with pytest.raises(SystemExit):
+        cli.main(["split", "--proportional", "pilot", "--band", "mid"])
 
 
 def test_unknown_command_is_rejected() -> None:

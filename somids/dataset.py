@@ -15,7 +15,7 @@ import random
 import shutil
 import subprocess
 import sys
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -163,6 +163,9 @@ class Band:
     min_difficulty: int
     max_difficulty: int
 
+
+# Extra proportional draws, disjoint from every other split file present.
+PROPORTIONAL: dict[str, int] = {"pilot": 300}
 
 BANDS: dict[str, Band] = {
     # features point most learners the wrong way
@@ -418,15 +421,47 @@ def write_splits(raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR) -> Path
     return write_manifest(raw_dir, splits_dir)
 
 
+Draw = Callable[[Sequence[Flow], set[int]], list[Flow]]
+
+
+def draw_proportional_split(
+    test: Sequence[Flow], used_ids: Collection[int], size: int, seed: int = SPLIT_SEED
+) -> list[Flow]:
+    """Seeded proportional draw of `size` Test+ flows outside `used_ids`."""
+    order = list(test)
+    random.Random(seed).shuffle(order)  # noqa: S311  # seeded, reproducible draw
+    drawn = [flow for flow in order if flow.row_id not in used_ids][:size]
+    if len(drawn) < size:
+        msg = f"only {len(drawn)} unused flows; the split needs {size}"
+        raise ValueError(msg)
+    return drawn
+
+
 def write_band_split(
     name: str, raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR
 ) -> Path:
-    """Draw one diagnostic split disjoint from every other split file present,
-    then refresh the manifest."""
+    """Draw one diagnostic split disjoint from every other split file present."""
+
+    def draw(test: Sequence[Flow], used: set[int]) -> list[Flow]:
+        return draw_band_split(test, used, BANDS[name], SPLIT_SEED)
+
+    return _write_disjoint(name, draw, raw_dir, splits_dir)
+
+
+def write_proportional_split(
+    name: str, raw_dir: Path = RAW_DIR, splits_dir: Path = SPLITS_DIR
+) -> Path:
+    """Draw one extra proportional split disjoint from every other split file."""
+
+    def draw(test: Sequence[Flow], used: set[int]) -> list[Flow]:
+        return draw_proportional_split(test, used, PROPORTIONAL[name], SPLIT_SEED)
+
+    return _write_disjoint(name, draw, raw_dir, splits_dir)
+
+
+def _write_disjoint(name: str, draw: Draw, raw_dir: Path, splits_dir: Path) -> Path:
     others = [other for other in split_names(splits_dir) if other != name]
-    flows = draw_band_split(
-        load_test(raw_dir), used_row_ids(splits_dir, others), BANDS[name], SPLIT_SEED
-    )
+    flows = draw(load_test(raw_dir), used_row_ids(splits_dir, others))
     write_split(flows, splits_dir / f"{name}.csv")
     return write_manifest(raw_dir, splits_dir)
 

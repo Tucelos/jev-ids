@@ -26,9 +26,12 @@ Managed with [uv](https://docs.astral.sh/uv/). Secrets live in `.env`
 ```bash
 uv run python -m somids download
 uv run python -m somids split
-uv run python -m somids split --band mid   # balanced diagnostic split (hard | mid)
+uv run python -m somids split --band mid            # balanced diagnostic split (hard | mid)
+uv run python -m somids split --proportional pilot  # extra proportional split, disjoint
 uv run python -m somids run --detector jev --split internal --k 0,1,2,4,8,16 --seeds 0,1,2
 uv run python -m somids metrics results/<run_id>
+uv run python -m somids compare results/<run_a> results/<run_b>                       # paired, per k and rep
+uv run python -m somids compare results/<jev> results/<rf> --subset novel --k-a 0 --k-b all
 ```
 
 The subcommands land module by module; see

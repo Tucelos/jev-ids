@@ -10,17 +10,19 @@
     "paper": 300,
     "smoke": 5,
     "hard": 100,
-    "mid": 240
+    "mid": 240,
+    "pilot": 300
   },
   "novel_attack_rows": {
     "internal": 11,
     "paper": 45,
     "smoke": 0,
     "hard": 22,
-    "mid": 72
+    "mid": 72,
+    "pilot": 39
   },
   "category_table_version": "2026-09-20",
-  "drawn_on": "2026-09-20",
+  "drawn_on": "2026-09-21",
   "bands": {
     "hard": {
       "min_difficulty": 0,

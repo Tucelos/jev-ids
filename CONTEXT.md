@@ -34,8 +34,10 @@ k = 4 means twenty Examples.
 **Split**:
 A frozen, seeded sample of KDDTest+. `internal` is for tuning, `paper` for
 reported results, `smoke` for exercising the pipeline; these three are
-proportional. `hard` and `mid` are diagnostic samples, half attacks and half
-normals, of Flows inside a band of Difficulty. Splits are disjoint.
+proportional, and `pilot` is a further proportional sample used to rehearse the
+protocol and take design decisions. `hard` and `mid` are diagnostic samples,
+half attacks and half normals, of Flows inside a band of Difficulty. Splits are
+disjoint.
 
 **Difficulty**:
 NSL-KDD's per-record count of classic learners, out of 21, that classified the

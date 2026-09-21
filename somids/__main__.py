@@ -19,6 +19,11 @@ def parse_ks(text: str) -> tuple[int | None, ...]:
     return tuple(None if part == "all" else int(part) for part in parts)
 
 
+def parse_k(text: str) -> int | None:
+    """One k: an integer, or `all` for the whole Train+."""
+    return None if text.strip() == "all" else int(text)
+
+
 def _ints(text: str) -> tuple[int, ...]:
     return tuple(int(part) for part in text.split(",") if part.strip())
 
@@ -32,11 +37,18 @@ def build_parser() -> argparse.ArgumentParser:
     splitter = subcommands.add_parser(
         "split", help="draw the internal, paper and smoke splits from KDDTest+"
     )
-    splitter.add_argument(
+    extra = splitter.add_mutually_exclusive_group()
+    extra.add_argument(
         "--band",
         choices=tuple(dataset.BANDS),
         default=None,
         help="draw only this balanced diagnostic split of a difficulty band",
+    )
+    extra.add_argument(
+        "--proportional",
+        choices=tuple(dataset.PROPORTIONAL),
+        default=None,
+        help="draw only this extra proportional split, disjoint from the rest",
     )
     _add_run_arguments(subcommands.add_parser("run", help="run one detector"))
     reporter = subcommands.add_parser("metrics", help="summarize one or more runs")
@@ -54,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
     comparer.add_argument(
         "--bootstrap", type=int, default=2000, help="resamples for the ΔF1 interval"
     )
+    comparer.add_argument(
+        "--subset",
+        choices=("all", "novel", "known"),
+        default="all",
+        help="every flow, only novel attacks or only known attacks",
+    )
+    comparer.add_argument("--k-a", default=None, help="cut run A to this k or `all`")
+    comparer.add_argument("--k-b", default=None, help="cut run B to this k or `all`")
     return parser
 
 
@@ -108,11 +128,13 @@ def _download(_args: argparse.Namespace) -> None:
 
 
 def _split(args: argparse.Namespace) -> None:
-    """`split` draws the proportional splits; `split --band NAME` one diagnostic."""
-    band = None if args.band is None else str(args.band)
-    manifest = (
-        dataset.write_splits() if band is None else dataset.write_band_split(band)
-    )
+    """`split` draws the three splits; `--band` or `--proportional` one extra."""
+    if args.band is not None:
+        manifest = dataset.write_band_split(str(args.band))
+    elif args.proportional is not None:
+        manifest = dataset.write_proportional_split(str(args.proportional))
+    else:
+        manifest = dataset.write_splits()
     print(manifest.read_text(encoding="utf-8"), end="")
 
 
@@ -125,7 +147,17 @@ def _metrics(args: argparse.Namespace) -> None:
 
 
 def _compare(args: argparse.Namespace) -> None:
-    compare.report(Path(args.run_a), Path(args.run_b), int(args.bootstrap))
+    if (args.k_a is None) != (args.k_b is None):
+        msg = "--k-a and --k-b come together"
+        raise SystemExit(msg)
+    ks = None if args.k_a is None else (parse_k(str(args.k_a)), parse_k(str(args.k_b)))
+    compare.report(
+        Path(args.run_a),
+        Path(args.run_b),
+        int(args.bootstrap),
+        cast(compare.Subset, args.subset),
+        ks,
+    )
 
 
 HANDLERS: dict[str, Callable[[argparse.Namespace], None]] = {

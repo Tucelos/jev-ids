@@ -16,6 +16,8 @@ def make(  # noqa: PLR0913
     y_pred: int | None,
     *,
     k: int | None = 0,
+    rep: int = 0,
+    novel: bool = False,
     detector: str = "a",
     split: str = "mid",
 ) -> Prediction:
@@ -28,7 +30,7 @@ def make(  # noqa: PLR0913
         k=k,
         n_examples=0,
         seed=0,
-        rep=0,
+        rep=rep,
         batch=1,
         format="csv",
         prompt_version="v1",
@@ -39,7 +41,7 @@ def make(  # noqa: PLR0913
         category_true="dos" if y_true else "normal",
         category_pred=None,
         confidence=None,
-        novel_attack=False,
+        novel_attack=novel,
         input_tokens=None,
         output_tokens=None,
         cache_tokens=None,
@@ -67,17 +69,35 @@ def runs() -> tuple[list[Prediction], list[Prediction]]:
     return a, b
 
 
-def test_pair_runs_matches_by_flow_and_k_and_drops_unmatched() -> None:
+def test_pair_runs_matches_by_flow_k_and_rep_and_drops_unmatched() -> None:
     a, b = runs()
     pairs = compare.pair_runs([*a, make(99, 1, 1, k=8)], b)
-    assert set(pairs) == {0}
-    assert len(pairs[0]) == 10
-    assert all(left.row_id == right.row_id for left, right in pairs[0])
+    assert set(pairs) == {(0, 0, 0)}
+    assert len(pairs[(0, 0, 0)]) == 10
+    assert all(left.row_id == right.row_id for left, right in pairs[(0, 0, 0)])
+
+
+def test_pair_runs_with_ks_pairs_across_k_and_keeps_reps_apart() -> None:
+    a, b = runs()
+    a_k0 = [make(p.row_id, p.y_true, p.y_pred, k=0, rep=1) for p in a]
+    b_all = [make(p.row_id, p.y_true, p.y_pred, k=None, detector="b") for p in b]
+    b_all += [make(p.row_id, p.y_true, p.y_pred, k=None, rep=1) for p in b]
+    assert compare.pair_runs(a_k0, b_all) == {}
+    pairs = compare.pair_runs([*a, *a_k0], b_all, ks=(0, None))
+    assert set(pairs) == {(0, None, 0), (0, None, 1)}
+    assert all(len(group) == 10 for group in pairs.values())
+
+
+def test_select_keeps_novel_or_known_attacks() -> None:
+    rows = [make(0, 1, 1, novel=True), make(1, 1, 0), make(2, 0, 0)]
+    assert [p.row_id for p in compare.select(rows, "all")] == [0, 1, 2]
+    assert [p.row_id for p in compare.select(rows, "novel")] == [0]
+    assert [p.row_id for p in compare.select(rows, "known")] == [1]
 
 
 def test_score_counts_only_discordant_pairs() -> None:
     a, b = runs()
-    assert compare.score(compare.pair_runs(a, b)[0]) == (4, 1)
+    assert compare.score(compare.pair_runs(a, b)[(0, 0, 0)]) == (4, 1)
 
 
 def test_mcnemar_exact_is_two_sided_and_none_without_discordance() -> None:
@@ -89,7 +109,7 @@ def test_mcnemar_exact_is_two_sided_and_none_without_discordance() -> None:
 
 def test_bootstrap_delta_brackets_the_observed_difference() -> None:
     a, b = runs()
-    pairs = compare.pair_runs(a, b)[0]
+    pairs = compare.pair_runs(a, b)[(0, 0, 0)]
     observed = compare.delta_f1(pairs)
     low, high = compare.bootstrap_delta(pairs, resamples=200, seed=1)
     assert observed is not None and low is not None and high is not None
@@ -106,7 +126,10 @@ def test_compare_orders_k_and_fills_every_field() -> None:
     a_k8 = [make(i, 1, 1, k=8) for i in range(2)]
     b_k8 = [make(i, 1, 0, k=8) for i in range(2)]
     results = compare.compare([*a_k8, *a], [*b_k8, *b], resamples=50)
-    assert [result.k for result in results] == [0, 8]
+    assert [(result.k_a, result.k_b, result.rep) for result in results] == [
+        (0, 0, 0),
+        (8, 8, 0),
+    ]
     first = results[0]
     assert (first.pairs, first.discordant, first.a_right, first.b_right) == (
         10,
@@ -132,9 +155,7 @@ def test_report_prints_a_table_with_the_detector_names(
     results = compare.report(run_a, run_b, resamples=20)
 
     out = capsys.readouterr().out
-    assert out.splitlines()[0].startswith(
-        "| k | pairs | discordant | a right | b right |"
-    )
+    assert out.splitlines()[0].startswith("| k a | k b | rep | pairs | discordant |")
     assert len(results) == 1
 
 

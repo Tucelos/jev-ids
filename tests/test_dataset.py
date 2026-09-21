@@ -223,6 +223,36 @@ def test_write_band_split_stays_disjoint_and_extends_the_manifest(
     }
 
 
+def test_draw_proportional_split_skips_used_ids_and_is_seeded() -> None:
+    rows = hard_rows()
+    drawn = dataset.draw_proportional_split(rows, {0, 1}, size=3, seed=1)
+    assert len(drawn) == 3
+    assert {0, 1}.isdisjoint(flow.row_id for flow in drawn)
+    assert drawn == dataset.draw_proportional_split(rows, {0, 1}, size=3, seed=1)
+    with pytest.raises(ValueError, match="only 6 unused flows"):
+        dataset.draw_proportional_split(rows, {0, 1}, size=7, seed=1)
+
+
+def test_write_proportional_split_is_disjoint_from_every_split_file(
+    raw_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    splits_dir = tmp_path / "splits"
+    splits_dir.mkdir()
+    test = dataset.load_test(raw_dir)
+    dataset.write_split(test[:3], splits_dir / "internal.csv")
+    dataset.write_split(test[3:5], splits_dir / "mid.csv")
+    monkeypatch.setattr(dataset, "SPLIT_SIZES", {"internal": 3})
+    monkeypatch.setattr(dataset, "PROPORTIONAL", {"pilot": 4})
+
+    manifest_path = dataset.write_proportional_split("pilot", raw_dir, splits_dir)
+
+    pilot = dataset.load_split("pilot", splits_dir)
+    assert len(pilot) == 4
+    assert {flow.row_id for flow in pilot}.isdisjoint(range(5))
+    manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["sizes"] == {"internal": 3, "mid": 2, "pilot": 4}
+
+
 def test_verify_checksums_accepts_unpinned_and_rejects_mismatch(
     raw_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
