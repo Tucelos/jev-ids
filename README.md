@@ -1,6 +1,8 @@
-<img src="docs/banner.svg" alt="Jev IDS · intrusion detection built on TypeSafe's Jev" width="100%" />
+<img src="docs/banner.svg" alt="Jev IDS banner showing the jev_ids terminal lockup, the tagline &quot;Intrusion detection with a System One Model, benchmarked against an LLM and a Random Forest.&quot;, and the command that runs a detector over NSL-KDD" width="100%" />
 
 # Jev IDS
+
+![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-0B6B3A?style=flat&labelColor=121917) ![Detector Jev, from TypeSafe](https://img.shields.io/badge/detector-Jev%20%28TypeSafe%29-0B6B3A?style=flat&labelColor=121917) ![Dataset NSL-KDD](https://img.shields.io/badge/dataset-NSL--KDD-0B6B3A?style=flat&labelColor=121917) ![Pilot F1 0.86](https://img.shields.io/badge/pilot%20F1-0.86-0B6B3A?style=flat&labelColor=121917)
 
 **An intrusion detection system that asks TypeSafe's Jev two typed questions about one network flow and gets a verdict back, with no text to parse.**
 
@@ -75,8 +77,8 @@ k is the number of labeled examples per category. k = 1 with five categories mea
 
 ## Small enough to read
 
-| File                                                            | Job                                                                        |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| File                                                             | Job                                                                        |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | [cli.py](jev_ids/cli.py)                                         | `run`, `metrics` and `compare`                                             |
 | [dataset.py](jev_ids/dataset.py)                                 | The card, the pool, the splits and the k-shot example draw                 |
 | [run.py](jev_ids/run.py)                                         | The loop, cell by cell and flow by flow, and the three files of a run      |
@@ -85,7 +87,7 @@ k is the number of labeled examples per category. k = 1 with five categories mea
 | [detectors/jev.py](jev_ids/detectors/jev.py)                     | Jev through the Vercel AI Gateway, one flow per request                    |
 | [detectors/llm.py](jev_ids/detectors/llm.py)                     | The LLM baselines through Agno                                             |
 | [detectors/random_forest.py](jev_ids/detectors/random_forest.py) | The classical baseline                                                     |
-| [prompts/nsl-kdd/](prompts/nsl-kdd)                             | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
+| [prompts/nsl-kdd/](prompts/nsl-kdd)                              | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
 
 ## Evidence and limits
 
