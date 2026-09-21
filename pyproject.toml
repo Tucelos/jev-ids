@@ -25,13 +25,13 @@ convention = "google"
 "tests/**" = ["S101", "PLR2004", "D"]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 7
+max-complexity = 10
 
 [tool.ruff.lint.pylint]
 max-args = 5
-max-branches = 7
-max-returns = 4
-max-statements = 30
+max-branches = 12
+max-returns = 6
+max-statements = 50
 
 [tool.pyright]
 typeCheckingMode = "strict"

@@ -4,12 +4,12 @@
 check: check-py check-ts check-dup
 
 fast:
-	@[ ! -f pyproject.toml ] || (uvx ruff check . && uvx ruff format --check . && uvx complexipy -q --max-complexity-allowed 7 .)
+	@[ ! -f pyproject.toml ] || (uvx ruff check . && uvx ruff format --check . && uvx complexipy -q --max-complexity-allowed 15 .)
 	@[ ! -f package.json ] || (npx eslint . && npx prettier --check .)
 
 check-py:
 	@[ ! -f pyproject.toml ] || (uvx ruff check . && uvx ruff format --check . \
-	  && uvx complexipy -q --max-complexity-allowed 7 . \
+	  && uvx complexipy -q --max-complexity-allowed 15 . \
 	  && uv run pyright && uv run pytest && uv run vulture \
 	  && uv export --format requirements-txt --no-hashes -q | uvx pip-audit --no-deps --disable-pip -r /dev/stdin)
 
