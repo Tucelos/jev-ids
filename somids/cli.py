@@ -6,7 +6,7 @@ In reading order:
 - `build_parser`: the three subcommands and their arguments.
 - `run_command`, `metrics_command`, `compare_command`: one handler per subcommand, each turning the parsed arguments into calls of `run` or
   `metrics`.
-- `print_csv`: a table as CSV on stdout (grilling §15).
+- `print_csv`: a table as CSV on stdout.
 - `main`: parse, dispatch, return the exit code.
 
 Nothing here knows how a Detector or a metric works, and no dataset is named here: `run` takes the card of the dataset as `--dataset`.
@@ -39,10 +39,7 @@ def parse_ints(text: str) -> tuple[int, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The three subcommands; each one carries the function that handles it.
-
-    The defaults of `run` are the bundle agreed in grilling Q27.
-    """
+    """The three subcommands; each one carries the function that handles it."""
     parser = argparse.ArgumentParser(prog="somids")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -114,7 +111,7 @@ def print_csv(rows: Sequence[dict[str, Any]]) -> None:
     """The rows as CSV on stdout, header first; nothing at all when there are none.
 
     The header is every key any row has, in order of first appearance: the usage columns of a summary follow the Detectors present. CSV on
-    stdout by decision (grilling §15): the user redirects it when a file is wanted.
+    stdout: the user redirects it when a file is wanted.
     """
     if not rows:
         return

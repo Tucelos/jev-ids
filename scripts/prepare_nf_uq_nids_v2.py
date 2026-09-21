@@ -7,13 +7,12 @@ https://www.kaggle.com/datasets/aryashah2k/nfuqnidsv2-network-intrusion-detectio
     uv run python -m scripts.prepare_nf_uq_nids_v2 --novel <CATEGORY> [<CATEGORY> ...]
 
 The file is far too large to be a pool, so one pass over it fills two kinds of reservoir at once: one per category for `pool.csv`
-(`--pool-per-category` rows each, none for the categories named by `--novel`, which are held out as novel attacks, grilling §15 decision B)
-and one uniform sample of `--test-size` rows from which the `smoke`, `internal` and `paper` splits are cut in seeded order, after dropping
-any row that also landed in the pool. The card's `features` decide which columns are kept: the two IPv4 addresses are out because they
-identify the testbed, not the traffic (decision A); the `Dataset` column survives as the trace column `source_dataset`. `SOURCE.json`
-records the file's sha256, the rows read, the count per category, the seed, the sizes, the held-out categories and the dropped columns. Here
-k = all means the whole pool, a class-balanced sample, not the whole file. Rehearse with a `head -n 200000` copy of the file before the full
-pass.
+(`--pool-per-category` rows each, none for the categories named by `--novel`, which are held out as novel attacks) and one uniform sample of
+`--test-size` rows from which the `smoke`, `internal` and `paper` splits are cut in seeded order, after dropping any row that also landed in
+the pool. The card's `features` decide which columns are kept: the two IPv4 addresses are out because they identify the testbed, not the
+traffic; the `Dataset` column survives as the trace column `source_dataset`. `SOURCE.json` records the file's sha256, the rows read, the
+count per category, the seed, the sizes, the held-out categories and the dropped columns. Here k = all means the whole pool, a
+class-balanced sample, not the whole file. Rehearse with a `head -n 200000` copy of the file before the full pass.
 """
 
 import argparse
@@ -31,7 +30,7 @@ from somids.dataset import Config, load_config, write_split
 KAGGLE_DATASET = "aryashah2k/nfuqnidsv2-network-intrusion-detection-dataset"
 LABEL_COLUMN = "Attack"
 TESTBED_COLUMN = "Dataset"
-# Proportional splits cut from the uniform reservoir (grilling Q4, Q27 sizes).
+# Proportional splits cut from the uniform reservoir.
 SPLIT_SIZES = {"smoke": 5, "internal": 50, "paper": 300}
 
 # One retained record: its 0-based index among the data rows (the file line is row_id + 2, the header being line 1) and its raw fields.

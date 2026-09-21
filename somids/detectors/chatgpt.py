@@ -3,13 +3,13 @@
 In reading order:
 
 - `jwt_expiry` and `TokenStore`: the OAuth tokens on disk, read and refreshed through the Codex client id.
-- `ChatGPTSubscriptionModel`: Agno's `OpenAIResponses` routed to the backend, signed with the token and carrying the `instructions` preamble
-  (Q29).
+- `ChatGPTSubscriptionModel`: Agno's `OpenAIResponses` routed to the backend, signed with the token and carrying the `instructions`
+  preamble.
 - `aggregate`, `append_text`, `merge_metadata`: the backend only streams, so the deltas are merged back into one response.
 
-This is the minimal, typed re-implementation agreed in the grilling (Q28, Q34) of the user's original `ChatGPTSubscriptionModel`: the same
-environment variables and token file, so a login done there is reused here. The browser login is not here: run it once through the original
-module if the refresh token expires.
+This is the minimal, typed re-implementation of the user's original `ChatGPTSubscriptionModel`: the same environment variables and token
+file, so a login done there is reused here. The browser login is not here: run it once through the original module if the refresh token
+expires.
 """
 
 import base64
@@ -36,8 +36,7 @@ DEFAULT_OAUTH_FILE = Path.home() / ".chatgpt_oauth" / "tokens.json"
 # A token is renewed this long before it expires, so it never dies in the middle of a call that was started while it was still valid.
 REFRESH_MARGIN_SECONDS = 300.0
 JWT_PARTS = 3
-# Sent as `instructions` with every request: the backend requires the field (grilling Q29). Fixed after 1,685 calls accepted it (§14, cut
-# 3); if the backend ever rejects it, the Codex CLI's own text is in the grilling, §6.
+# Sent as `instructions` with every request: the backend requires the field. Fixed after 1,685 calls accepted it.
 PREAMBLE = (
     "You are a classifier for network intrusion detection. Follow the developer instructions and answer only in the requested JSON format."
 )
@@ -68,7 +67,7 @@ def jwt_expiry(token: str) -> float | None:
 class TokenStore:
     """The OAuth tokens on disk, refreshed through the Codex client id.
 
-    The file is the one the original module writes, so both modules stay compatible and a login done there is reused here (grilling Q28).
+    The file is the one the original module writes, so both modules stay compatible and a login done there is reused here.
     """
 
     def __init__(self, path: Path | None = None) -> None:
@@ -151,7 +150,7 @@ class ChatGPTSubscriptionModel(OpenAIResponses):
         self.store = False
         self.include = ["reasoning.encrypted_content"]
         self.reasoning_summary = "auto"
-        # The backend requires `instructions`; the preamble goes there (Q29).
+        # The backend requires `instructions`; the preamble goes there.
         params: dict[str, Any] = dict(self.request_params or {})
         params["instructions"] = self.preamble
         self.request_params = params

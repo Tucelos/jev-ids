@@ -9,8 +9,8 @@ In reading order:
   `responses.jsonl`.
 
 A Detector's dict holds only what it measured (`p_attack`, `category_pred`, `latency_ms`, `usage`, `error`, ...), so rows of different
-Detectors carry different keys and a reader takes an optional key with `.get` (grilling §15). The key `raw`, the provider's whole answer,
-never reaches predictions.jsonl: it goes to responses.jsonl, which git ignores (Q25).
+Detectors carry different keys and a reader takes an optional key with `.get`. The key `raw`, the provider's whole answer, never reaches
+predictions.jsonl: it goes to responses.jsonl, which git ignores.
 """
 
 import json
@@ -31,9 +31,9 @@ Prediction = dict[str, Any]
 def complete_prediction(measured: dict[str, Any], flow: Flow, cell_fields: dict[str, Any]) -> Prediction:
     """One row: the cell, the Flow's truth, the Verdict, then what was measured.
 
-    `y_true`, `category_true` and `novel_attack` are copied from the Flow so the metrics never need the split file again (grilling §7).
-    `y_pred` is the Verdict at VERDICT_THRESHOLD, or None when the call failed and there is no p_attack; the metrics count such a row as
-    `normal` (fail-open, Q12). `request_id` is a client UUID that keys the raw answer in responses.jsonl.
+    `y_true`, `category_true` and `novel_attack` are copied from the Flow so the metrics never need the split file again. `y_pred` is the
+    Verdict at VERDICT_THRESHOLD, or None when the call failed and there is no p_attack; the metrics count such a row as `normal`
+    (fail-open). `request_id` is a client UUID that keys the raw answer in responses.jsonl.
     """
     p_attack = measured.get("p_attack")
     return {

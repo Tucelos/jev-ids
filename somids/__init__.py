@@ -9,8 +9,6 @@ The package, in reading order:
 - `records`: the Prediction row and the three files of a run.
 - `metrics`: summary tables and paired comparisons computed from those rows.
 - `cli`: the `run`, `metrics` and `compare` subcommands.
-
-Every design decision is recorded in `dev-docs/grilling-01-decisions.md`, cited here as "grilling Q<n>" or "§<n>".
 """
 
 from pathlib import Path

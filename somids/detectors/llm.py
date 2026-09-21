@@ -1,4 +1,4 @@
-"""The LLM baselines through an Agno Agent (grilling §6).
+"""The LLM baselines through an Agno Agent.
 
 Two providers share this detector: DeepSeek through its own API, and an OpenAI GPT-{5,6}.x model through the ChatGPT Codex backend with
 OAuth (see `chatgpt.py`).
@@ -8,11 +8,11 @@ In reading order:
 - `LLMDetector`: builds the provider's Agno model once; `predict` runs one Agent per Flow with the instructions of
   `prompts/<dataset>/llm.md`.
 - `instructions`: that Markdown with the Examples filled in.
-- `make_model`: the Agno model of a provider, with the knobs of Q20.
+- `make_model`: the Agno model of a provider, with its determinism knobs.
 - `measurements`: what one run measured, read off Agno's RunOutput.
 
-Both providers run at the lowest reasoning available (Q13). One `Agent.run` per Flow and no retries of our own (§14, cut 2): a provider
-error is an error row, and the run goes on (Q31).
+Both providers run at the lowest reasoning available. One `Agent.run` per Flow and no retries of our own: a provider error is an error row,
+and the run goes on.
 """
 
 import time
@@ -35,7 +35,7 @@ EXAMPLES_HEADER = "\nLabeled example records (record => category):\n"
 class Judgement(BaseModel):
     """The structured answer asked of every LLM.
 
-    `category` is free text in the schema, so the schema names no dataset; the prompt file lists the options (grilling §15).
+    `category` is free text in the schema, so the schema names no dataset; the prompt file lists the options.
     """
 
     verdict: Literal["attack", "normal"]
@@ -98,10 +98,10 @@ def instructions(template: str, examples: Sequence[Flow]) -> str:
 
 
 def make_model(provider: str, model_id: str) -> Any:
-    """The Agno model of a provider, with the determinism knobs agreed in Q20.
+    """The Agno model of a provider, with its determinism knobs.
 
     DeepSeek thinks by default and then silently ignores `temperature`, so thinking is off and the temperature is 0. GPT-5.x documents no
-    temperature and runs at `reasoning_effort="none"`, the lowest available (Q13).
+    temperature and runs at `reasoning_effort="none"`, the lowest available.
     """
     if provider == "deepseek":
         return DeepSeek(id=model_id, temperature=0.0, use_thinking=False)
@@ -112,7 +112,7 @@ def measurements(run: RunOutput, latency_ms: float) -> dict[str, Any]:
     """What one run measured: the Judgement, the wall-clock latency, Agno's metrics.
 
     Agno returns a Judgement when the model answered valid JSON for the schema; anything else is a parse error row with the first 200
-    characters of the text (Q12: an error row, not a crash). `usage` is `RunMetrics.to_dict()`, whatever the provider filled: tokens, cache
+    characters of the text (an error row, not a crash). `usage` is `RunMetrics.to_dict()`, whatever the provider filled: tokens, cache
     reads, reasoning tokens, Agno's own duration and time to first token; the metrics price it offline.
     """
     content: Any = run.content

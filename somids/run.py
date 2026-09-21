@@ -5,13 +5,13 @@ In reading order:
 - `RunSpec`: what the CLI resolved for one run.
 - `load_prompt`: any prompt file as text plus its sha256; Jev and the LLMs load their files (`jev.json`, `llm.md`) through it alike.
 - `build_detector` and `check_spec`: the Detector named in the spec, and the two combinations of Detector and k that would only waste calls.
-- `sample_examples`: k Examples per Category, seeded and nested across k (Q5).
+- `sample_examples`: k Examples per Category, seeded and nested across k.
 - `execute` and `run_cell`: the loop itself and the three files of the run.
 - `run_from_spec`: the CLI entry that strings the above together.
 
-The loop runs k outermost, then seed, then rep, then every Flow of the split (grilling Q11), so the prompt prefix stays constant for as long
-as possible and provider prefix caches get their best chance. One request judges one Flow (B = 1, §14). A call that fails ends as a row with
-`error`, never as a crash, and the run goes on (Q31).
+The loop runs k outermost, then seed, then rep, then every Flow of the split, so the prompt prefix stays constant for as long as possible
+and provider prefix caches get their best chance. One request judges one Flow (B = 1). A call that fails ends as a row with `error`, never
+as a crash, and the run goes on.
 """
 
 import hashlib
@@ -105,12 +105,12 @@ def make_run_id(spec: RunSpec, now: datetime) -> str:
 
 
 def sample_examples(train: Sequence[Flow], k: int, seed: int, categories: Sequence[str]) -> list[Flow]:
-    """Draw k Examples per Category, at random within each Category (grilling Q5).
+    """Draw k Examples per Category, at random within each Category.
 
     Each Category is shuffled by a random stream seeded with `seed` and its name, and its first k Flows are taken; so for one seed the draws
     are nested across k (the Examples of k = 4 are among those of k = 8) and independent of the other Categories. The final order is one
     more seeded shuffle, shared by every Detector, so no Detector sees the Examples grouped by Category. A Category with no Flow in the pool
-    (held out as novel, §15) contributes nothing; one with fewer than k Flows raises.
+    (held out as novel) contributes nothing; one with fewer than k Flows raises.
     """
     chosen: list[Flow] = []
     for category in categories:
@@ -180,7 +180,7 @@ def run_cell(
 ) -> None:
     """One (k, seed, rep) cell: every Flow of the split, one call and one row each.
 
-    The cell ends with one progress line: Flows judged and error rows (§14).
+    The cell ends with one progress line: Flows judged and error rows.
     """
     errors = 0
     for flow in flows:

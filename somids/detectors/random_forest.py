@@ -1,4 +1,4 @@
-"""The Random Forest baseline (grilling §5).
+"""The Random Forest baseline.
 
 In reading order:
 

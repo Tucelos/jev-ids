@@ -1,16 +1,16 @@
-"""Jev, TypeSafe's System One Model, through the Vercel AI Gateway (grilling §4).
+"""Jev, TypeSafe's System One Model, through the Vercel AI Gateway.
 
 In reading order:
 
 - `JevDetector`: holds the request template of `prompts/<dataset>/jev.json` and the gateway key; `predict` judges one Flow per request.
 - `request_body`: the template with the Flow and the Examples in its `state`.
-- `post` and `attempt`: one request, retried on gateway hiccups (Q12).
+- `post` and `attempt`: one request, retried on gateway hiccups.
 - `measurements`: what one successful answer measured.
 
 The template is the whole conversation with Jev: a `state` (the instructions, the column header, the Category descriptions) and two
 questions that point at state paths in backticks. `is_attack_r0` is a `noul` whose answer is a probability and becomes p_attack;
-`category_r0` is a `choice` over the Categories whose answer is the Category with a confidence (Q17). Python adds only what changes per
-call: the Flow under test at `records.r0` and the labeled `examples`. One request judges one Flow (B = 1, §14).
+`category_r0` is a `choice` over the Categories whose answer is the Category with a confidence. Python adds only what changes per call: the
+Flow under test at `records.r0` and the labeled `examples`. One request judges one Flow (B = 1).
 """
 
 import json
@@ -25,9 +25,9 @@ from somids.dataset import Flow
 
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 API_KEY_VAR = "AI_GATEWAY_API_KEY"
-# Retry policy (Q12): five attempts with exponential backoff on rate limits, server errors and network failures; any other 4xx fails at
-# once. A failure ends as a row with `error`, never as an exception, so the run continues (Q31). The gateway rate-limits often: 662 of the
-# 900 rows of the pilot needed at least one retry.
+# Retry policy: five attempts with exponential backoff on rate limits, server errors and network failures; any other 4xx fails at once. A
+# failure ends as a row with `error`, never as an exception, so the run continues. The gateway rate-limits often: 662 of the 900 rows of the
+# pilot needed at least one retry.
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 1.0
 TIMEOUT_SECONDS = 60
@@ -89,7 +89,7 @@ def attempt(body: dict[str, Any], api_key: str) -> dict[str, Any]:
 
 
 def post(body: dict[str, Any], api_key: str) -> dict[str, Any]:
-    """Up to MAX_ATTEMPTS attempts with exponential backoff (Q12).
+    """Up to MAX_ATTEMPTS attempts with exponential backoff.
 
     Only a retryable failure earns another attempt. `latency_ms` measures the successful attempt alone and `retries` counts the failed ones
     before it.
@@ -107,8 +107,8 @@ def post(body: dict[str, Any], api_key: str) -> dict[str, Any]:
 def measurements(body: dict[str, Any], latency_ms: float) -> dict[str, Any]:
     """What one answer measured, plus the whole body as `raw` for responses.jsonl.
 
-    p_attack is the `noul` answer; the Category and the recorded confidence come from the `choice` answer (Q17). `usage` is the gateway's
-    own token report; the metrics price it offline against prices.json (Q2, Q21).
+    p_attack is the `noul` answer; the Category and the recorded confidence come from the `choice` answer. `usage` is the gateway's own
+    token report; the metrics price it offline against prices.json.
     """
     answers = body["answers"]
     return {

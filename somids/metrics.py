@@ -2,8 +2,8 @@
 
 Helpers first (`verdict`, `mean`, `sd`, `ratio`, `rate`, `select`, `cut`, `group`), then the scores of one set of rows (`scores`), the
 priced usage (`cost_usd_per_1m`, `numeric_fields`, `usage`), the summary (`summary`, `sort_key`, `summarize`) and the paired comparison
-(`mcnemar_exact`, `compare_cell`, `compare`). Attack-class F1, not macro; a row without a Verdict counts as `normal` (fail-open, Q12); the
-CLI turns the dicts into CSV.
+(`mcnemar_exact`, `compare_cell`, `compare`). Attack-class F1, not macro; a row without a Verdict counts as `normal` (fail-open); the CLI
+turns the dicts into CSV.
 """
 
 import json
@@ -21,7 +21,7 @@ Pair = tuple[Prediction, Prediction]
 
 
 def verdict(prediction: Prediction) -> int:
-    """The Verdict of a row; without one (a failed call) it counts as normal, Q12."""
+    """The Verdict of a row; without one (a failed call) it counts as normal."""
     return int(prediction.get("y_pred") or 0)
 
 
@@ -121,7 +121,7 @@ def summary(members: Sequence[Prediction], prices: dict[str, Any]) -> dict[str, 
         "flows": len({p["row_id"] for p in members}),
         "predictions": len(members),
         **{f"{name}_mean": mean(cell[name] for cell in cells) for name in cells[0]},
-        "f1_sd": sd(cell["f1"] for cell in cells),  # the paper's mean ± sd, Q15
+        "f1_sd": sd(cell["f1"] for cell in cells),  # the paper's mean ± sd
         **usage(members, prices),
     }
 

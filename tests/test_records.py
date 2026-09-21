@@ -31,7 +31,7 @@ def test_complete_prediction_adds_cell_truth_verdict_id_and_time() -> None:
     # The Verdict is taken at p_attack >= 0.5, the same point for every Detector.
     assert records.complete_prediction({"p_attack": 0.5}, FLOW, CELL)["y_pred"] == 1
     assert records.complete_prediction({"p_attack": 0.49}, FLOW, CELL)["y_pred"] == 0
-    # A failed call has no p_attack at all; its Verdict is None (fail-open, Q12).
+    # A failed call has no p_attack at all; its Verdict is None (fail-open).
     measured = {"error": "HTTP 500", "retries": 4}
     failed = records.complete_prediction(measured, FLOW, CELL)
     assert (failed["y_pred"], failed["error"], failed["retries"]) == (

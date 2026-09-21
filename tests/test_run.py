@@ -172,7 +172,7 @@ def test_sample_examples_is_balanced_nested_and_deterministic() -> None:
     assert run.sample_examples(TRAIN, 0, 0, CATEGORIES) == []
     with pytest.raises(ValueError, match="k = 3 asked"):
         run.sample_examples(TRAIN, 3, 0, CATEGORIES)
-    # A Category held out of the pool contributes no Examples (grilling §15).
+    # A Category held out of the pool contributes no Examples.
     assert run.sample_examples(TRAIN, 1, 0, [*CATEGORIES, "r2l"]) == k1
 
 
