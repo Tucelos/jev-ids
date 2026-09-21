@@ -5,7 +5,7 @@ In reading order:
 - `Flow`: one record of a dataset, as its CSV row has it.
 - `load_config`: the card `dataset.json` as a dict, hashed.
 - `flow_from_row` and `load_split`: a CSV in the shared shape as Flows.
-- `write_split`: the same shape, written by the preparation scripts.
+- `split_header` and `write_split`: the same shape, written by the preparation scripts.
 
 A dataset lives in `data/<name>/`: `dataset.json` (the card), `pool.csv` (the Flows that Examples are drawn from) and `splits/<split>.csv`
 (the Flows a run judges). The card names the dataset, lists its `features` in column order, the `symbolic` ones among them, the `categories`
@@ -90,6 +90,15 @@ def load_split(path: Path, config: Config) -> list[Flow]:
     """Every Flow of one CSV in the shared shape: a split file or the pool."""
     with path.open(encoding="utf-8", newline="") as handle:
         return [flow_from_row(row, config) for row in csv.DictReader(handle)]
+
+
+def split_header(config: Config, *extra: str) -> list[str]:
+    """The column names every split and pool file starts with, plus any trace column.
+
+    The three writers of this shape (the two preparation scripts and the test builder) differ only in the trace columns they append, so the
+    shared part is named here, beside the docstring that defines it.
+    """
+    return ["row_id", *config["features"], "category", "novel_attack", *extra]
 
 
 def write_split(path: Path, header: Sequence[str], rows: Iterable[Sequence[object]]) -> None:

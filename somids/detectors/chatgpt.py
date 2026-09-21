@@ -5,7 +5,7 @@ In reading order:
 - `jwt_expiry` and `TokenStore`: the OAuth tokens on disk, read and refreshed through the Codex client id.
 - `ChatGPTSubscriptionModel`: Agno's `OpenAIResponses` routed to the backend, signed with the token and carrying the `instructions`
   preamble.
-- `aggregate`, `append_text`, `merge_metadata`: the backend only streams, so the deltas are merged back into one response.
+- `aggregate`: the backend only streams, so the deltas are merged back into one response.
 
 This is the minimal, typed re-implementation of the user's original `ChatGPTSubscriptionModel`: the same environment variables and token
 file, so a login done there is reused here. The browser login is not here: run it once through the original module if the refresh token
@@ -19,7 +19,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Self
+from typing import Any
 
 import requests
 from agno.models.message import Message
@@ -40,11 +40,6 @@ JWT_PARTS = 3
 PREAMBLE = (
     "You are a classifier for network intrusion detection. Follow the developer instructions and answer only in the requested JSON format."
 )
-
-
-def oauth_file() -> Path:
-    """The token file: CHATGPT_TOKEN_PATH, or the original module's default path."""
-    return Path(os.environ.get(OAUTH_FILE_VAR, str(DEFAULT_OAUTH_FILE))).expanduser()
 
 
 def jwt_expiry(token: str) -> float | None:
@@ -72,15 +67,10 @@ class TokenStore:
 
     def __init__(self, path: Path | None = None) -> None:
         """Remember where the tokens live; nothing is read until they are needed."""
-        self.path = oauth_file() if path is None else path
+        # CHATGPT_TOKEN_PATH when it is set, otherwise the path the original module writes to.
+        default = Path(os.environ.get(OAUTH_FILE_VAR, str(DEFAULT_OAUTH_FILE))).expanduser()
+        self.path = default if path is None else path
         self.tokens: dict[str, Any] = {}
-
-    def load(self) -> Self:
-        """Read the token file; a missing file points at the login that creates it."""
-        if not self.path.exists():
-            raise FileNotFoundError(f"no OAuth tokens at {self.path}; log in once with the original module")
-        self.tokens = json.loads(self.path.read_text(encoding="utf-8"))
-        return self
 
     def save(self) -> None:
         """Write the tokens back, readable by the owner only: they are bearer tokens."""
@@ -88,17 +78,18 @@ class TokenStore:
         self.path.write_text(json.dumps(self.tokens, indent=2), encoding="utf-8")
         self.path.chmod(0o600)
 
-    def is_expired(self, now: float | None = None) -> bool:
-        """Whether the access token expires within REFRESH_MARGIN_SECONDS of `now`."""
-        expires_at = float(self.tokens.get("expires_at", 0.0))
-        current = time.time() if now is None else now
-        return current + REFRESH_MARGIN_SECONDS >= expires_at
-
     def access_token(self) -> str:
-        """A valid access token, loading and refreshing the file as needed."""
+        """A valid access token, reading the file and refreshing it as needed.
+
+        The file is read the first time a token is asked for, and a missing one points at the login that creates it. A token that expires
+        within REFRESH_MARGIN_SECONDS is renewed before it is handed out, so it never dies in the middle of a call that was started while
+        it was still valid.
+        """
         if not self.tokens:
-            self.load()
-        if self.is_expired():
+            if not self.path.exists():
+                raise FileNotFoundError(f"no OAuth tokens at {self.path}; log in once with the original module")
+            self.tokens = json.loads(self.path.read_text(encoding="utf-8"))
+        if time.time() + REFRESH_MARGIN_SECONDS >= float(self.tokens.get("expires_at", 0.0)):
             self.refresh()
         return str(self.tokens["access_token"])
 
@@ -200,32 +191,24 @@ class ChatGPTSubscriptionModel(OpenAIResponses):
 
 
 def aggregate(deltas: Any) -> ModelResponse:
-    """Merge streamed deltas: text, reasoning, usage and provider data."""
+    """Merge the streamed deltas: text, reasoning, usage and provider data."""
     merged = ModelResponse()
     merged.role = "assistant"
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
     for delta in deltas:
-        append_text(delta, content_parts, reasoning_parts)
-        merge_metadata(delta, merged)
+        # Text and reasoning arrive in pieces and are joined at the end; the usage report is resent whole, so the last one seen wins, and
+        # the provider fields accumulate across the stream.
+        if delta.content is not None:
+            content_parts.append(delta.content)
+        if delta.reasoning_content is not None:
+            reasoning_parts.append(delta.reasoning_content)
+        if delta.response_usage is not None:
+            merged.response_usage = delta.response_usage
+        if delta.provider_data is not None:
+            merged.provider_data = {**(merged.provider_data or {}), **delta.provider_data}
     if content_parts:
         merged.content = "".join(content_parts)
     if reasoning_parts:
         merged.reasoning_content = "".join(reasoning_parts)
     return merged
-
-
-def append_text(delta: Any, content_parts: list[str], reasoning_parts: list[str]) -> None:
-    """Collect the text and reasoning pieces of one delta."""
-    if delta.content is not None:
-        content_parts.append(delta.content)
-    if delta.reasoning_content is not None:
-        reasoning_parts.append(delta.reasoning_content)
-
-
-def merge_metadata(delta: Any, merged: ModelResponse) -> None:
-    """Keep the last usage report and every provider field seen in the stream."""
-    if delta.response_usage is not None:
-        merged.response_usage = delta.response_usage
-    if delta.provider_data is not None:
-        merged.provider_data = {**(merged.provider_data or {}), **delta.provider_data}

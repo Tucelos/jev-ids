@@ -1,7 +1,7 @@
 """Tables from predictions.jsonl rows: `summarize` one or more runs, `compare` two.
 
-Helpers first (`verdict`, `mean`, `sd`, `ratio`, `rate`, `select`, `cut`, `group`), then the scores of one set of rows (`scores`), the
-priced usage (`cost_usd_per_1m`, `numeric_fields`, `usage`), the summary (`summary`, `sort_key`, `summarize`) and the paired comparison
+Helpers first (`verdict`, `mean`, `ratio`, `rate`, `select`, `cut`, `group`), then the scores of one set of rows (`scores`), the priced
+usage (`cost_usd_per_1m`, `usage`), the summary (`summary`, `sort_key`, `summarize`) and the paired comparison
 (`mcnemar_exact`, `compare_cell`, `compare`). Attack-class F1, not macro; a row without a Verdict counts as `normal` (fail-open); the CLI
 turns the dicts into CSV.
 """
@@ -29,12 +29,6 @@ def mean(values: Iterable[float | None]) -> float | None:
     """Mean of the values present; None when all are missing."""
     present = [value for value in values if value is not None]
     return statistics.fmean(present) if present else None
-
-
-def sd(values: Iterable[float | None]) -> float | None:
-    """Sample standard deviation of the values present; None below two values."""
-    present = [value for value in values if value is not None]
-    return statistics.stdev(present) if len(present) > 1 else None
 
 
 def ratio(numerator: float, denominator: float) -> float | None:
@@ -98,16 +92,13 @@ def cost_usd_per_1m(row: Prediction, prices: dict[str, Any]) -> float | None:
     )
 
 
-def numeric_fields(dicts: Iterable[dict[str, Any]]) -> list[str]:
-    """The keys, sorted, holding a number in at least one of the dicts."""
-    return sorted({k for d in dicts for k, v in d.items() if isinstance(v, int | float)})
-
-
 def usage(rows: Sequence[Prediction], prices: dict[str, Any]) -> dict[str, float | None]:
     """Mean of every number in the rows' usage, cost per 1M Flows and mean latency."""
-    usages = [p.get("usage", {}) for p in rows]
+    usages: list[dict[str, Any]] = [p.get("usage", {}) for p in rows]
+    # Every key that holds a number in at least one row: Detectors report different token fields, so the columns follow the rows.
+    counted = sorted({name for u in usages for name, value in u.items() if isinstance(value, int | float)})
     return {
-        **{f"{f}_mean": mean(u.get(f) for u in usages) for f in numeric_fields(usages)},
+        **{f"{name}_mean": mean(u.get(name) for u in usages) for name in counted},
         "cost_usd_per_1m": mean(cost_usd_per_1m(p, prices) for p in rows),
         "latency_ms_mean": mean(p.get("latency_ms") for p in rows),
     }
@@ -116,12 +107,14 @@ def usage(rows: Sequence[Prediction], prices: dict[str, Any]) -> dict[str, float
 def summary(members: Sequence[Prediction], prices: dict[str, Any]) -> dict[str, Any]:
     """Counts, every score averaged over the (seed, rep) cells, sd of F1 and usage."""
     cells = [scores(cell) for cell in group(members, ("seed", "rep")).values()]
+    # The paper reports mean ± sd of F1 across the cells; a cell whose F1 is undefined does not enter the spread, and one cell has none.
+    f1_values = [cell["f1"] for cell in cells if cell["f1"] is not None]
     return {
         "cells": len(cells),
         "flows": len({p["row_id"] for p in members}),
         "predictions": len(members),
         **{f"{name}_mean": mean(cell[name] for cell in cells) for name in cells[0]},
-        "f1_sd": sd(cell["f1"] for cell in cells),  # the paper's mean ± sd
+        "f1_sd": statistics.stdev(f1_values) if len(f1_values) > 1 else None,
         **usage(members, prices),
     }
 

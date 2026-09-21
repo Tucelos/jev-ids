@@ -1,5 +1,6 @@
 """Summary metrics and paired comparisons over synthetic rows."""
 
+import statistics
 from collections.abc import Sequence
 from typing import Any
 
@@ -102,7 +103,6 @@ def test_usage_averages_every_number_present_and_ignores_the_rest() -> None:
     # A row without any usage or latency (the Random Forest) gives only missing values.
     assert set(metrics.usage([{"y_true": 1}], PRICES).values()) == {None}
     assert metrics.mean([]) is None
-    assert metrics.sd([1.0]) is None
 
 
 def test_summarize_has_one_row_per_group_averaged_over_cells() -> None:
@@ -122,7 +122,9 @@ def test_summarize_has_one_row_per_group_averaged_over_cells() -> None:
     assert (one_shot["cells"], one_shot["flows"], one_shot["predictions"]) == (2, 2, 4)
     # The seed 0 cell has F1 = 1 and the seed 1 cell F1 = 0.
     assert one_shot["f1_mean"] == pytest.approx(0.5)
-    assert one_shot["f1_sd"] == pytest.approx(metrics.sd([1.0, 0.0]))
+    assert one_shot["f1_sd"] == pytest.approx(statistics.stdev([1.0, 0.0]))
+    # A single cell has no spread at all.
+    assert zero_shot["f1_sd"] is None
     assert one_shot["recall_known_mean"] == 0.5
     assert one_shot["recall_novel_mean"] is None
     assert one_shot["cost_usd_per_1m"] == pytest.approx(100 * 0.042)

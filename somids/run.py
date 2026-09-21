@@ -6,7 +6,7 @@ In reading order:
 - `load_prompt`: any prompt file as text plus its sha256; Jev and the LLMs load their files (`jev.json`, `llm.md`) through it alike.
 - `build_detector` and `check_spec`: the Detector named in the spec, and the two combinations of Detector and k that would only waste calls.
 - `sample_examples`: k Examples per Category, seeded and nested across k.
-- `execute` and `run_cell`: the loop itself and the three files of the run.
+- `execute`: the loop itself, cell by cell and Flow by Flow, and the three files of the run.
 - `run_from_spec`: the CLI entry that strings the above together.
 
 The loop runs k outermost, then seed, then rep, then every Flow of the split, so the prompt prefix stays constant for as long as possible
@@ -98,12 +98,6 @@ def check_spec(spec: RunSpec, detector_name: str) -> None:
         raise ValueError("the Random Forest starts at k = 1")
 
 
-def make_run_id(spec: RunSpec, now: datetime) -> str:
-    """`<UTC timestamp>-<dataset>-<detector>-<split>`: the directory under results/."""
-    detector = spec.detector.replace(":", "-")
-    return f"{now:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{detector}-{spec.split}"
-
-
 def sample_examples(train: Sequence[Flow], k: int, seed: int, categories: Sequence[str]) -> list[Flow]:
     """Draw k Examples per Category, at random within each Category.
 
@@ -133,10 +127,13 @@ def execute(
     """Run `detector` over `flows` with Examples drawn from `train`; the run directory.
 
     `config.json` is written first, with what is needed to trace the run to its exact inputs: the resolved spec, the card's name and hash,
-    the prompt hash.
+    the prompt hash. Then each (k, seed, rep) cell judges every Flow of the split, one call and one row each, and closes with a progress
+    line counting the Flows judged and the rows that came back with an error.
     """
     check_spec(spec, detector.name)
-    run_id = make_run_id(spec, datetime.now(UTC))
+    # `<UTC timestamp>-<dataset>-<detector>-<split>` names the directory under results/; the colon of `llm:chatgpt` is not a path character.
+    started = datetime.now(UTC)
+    run_id = f"{started:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{spec.detector.replace(':', '-')}-{spec.split}"
     run_dir = spec.results_dir / run_id
     write_config(
         run_dir,
@@ -147,7 +144,7 @@ def execute(
             "model": detector.model,
             "dataset": {"name": config["name"], "sha256": config["sha256"]},
             "prompt_hash": detector.prompt_hash,
-            "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "started_at": started.isoformat(timespec="seconds"),
         },
     )
     # The fields every row of this run shares; a cell adds k, seed, rep and the number of Examples.
@@ -164,31 +161,15 @@ def execute(
         # the whole pool.
         examples = list(train) if k is None else sample_examples(train, k, seed, config["categories"])
         for rep in range(spec.reps):
-            cell = {**run_fields, "k": k, "seed": seed, "rep": rep}
-            cell["n_examples"] = len(examples)
-            run_cell(detector, flows, examples, cell, run_dir)
+            cell = {**run_fields, "k": k, "seed": seed, "rep": rep, "n_examples": len(examples)}
+            errors = 0
+            for flow in flows:
+                prediction = complete_prediction(detector.predict(flow, examples), flow, cell)
+                append_prediction(run_dir, prediction)
+                errors += int(prediction.get("error") is not None)
+            print(f"k={k} seed={seed} rep={rep} flows={len(flows)} errors={errors}")
     print(f"done: {run_dir}")
     return run_dir
-
-
-def run_cell(
-    detector: Detector,
-    flows: Sequence[Flow],
-    examples: Sequence[Flow],
-    cell_fields: dict[str, Any],
-    run_dir: Path,
-) -> None:
-    """One (k, seed, rep) cell: every Flow of the split, one call and one row each.
-
-    The cell ends with one progress line: Flows judged and error rows.
-    """
-    errors = 0
-    for flow in flows:
-        measured = detector.predict(flow, examples)
-        prediction = complete_prediction(measured, flow, cell_fields)
-        append_prediction(run_dir, prediction)
-        errors += int(prediction.get("error") is not None)
-    print(f"k={cell_fields['k']} seed={cell_fields['seed']} rep={cell_fields['rep']} flows={len(flows)} errors={errors}")
 
 
 def run_from_spec(spec: RunSpec) -> Path:

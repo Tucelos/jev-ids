@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from somids.dataset import Config, load_config, write_split
+from somids.dataset import Config, load_config, split_header, write_split
 
 KAGGLE_DATASET = "aryashah2k/nfuqnidsv2-network-intrusion-detection-dataset"
 LABEL_COLUMN = "Attack"
@@ -149,23 +149,6 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def describe_splits(
-    header: Sequence[str],
-    config: Config,
-    splits: dict[str, list[Row]],
-    novel: Sequence[str],
-) -> dict[str, object]:
-    """The manifest entries about columns and splits: dropped, sizes, novel rows."""
-    kept = {*config["features"], LABEL_COLUMN, TESTBED_COLUMN}
-    label = header.index(LABEL_COLUMN)
-    novel_rows = {name: sum(fields[label] in novel for _, fields in rows) for name, rows in splits.items()}
-    return {
-        "dropped_columns": [name for name in header if name not in kept],
-        "sizes": {name: len(rows) for name, rows in splits.items()},
-        "novel_attack_rows": novel_rows,
-    }
-
-
 def main() -> None:
     """Sample the raw file into pool.csv, splits/ and SOURCE.json next to the card."""
     args = parse_args()
@@ -173,24 +156,15 @@ def main() -> None:
     header, pool, test, counts = sample(args.raw, config, args)
     pool_rows = sorted(row for rows in pool.values() for row in rows)
     splits = cut_splits(test, {row_id for row_id, _ in pool_rows}, args.seed)
-    shared_header = [
-        "row_id",
-        *config["features"],
-        "category",
-        "novel_attack",
-        "source_dataset",
-    ]
-    write_split(
-        args.out / "pool.csv",
-        shared_header,
-        shared_rows(header, config, pool_rows, args.novel),
-    )
+    shared_header = split_header(config, "source_dataset")
+    write_split(args.out / "pool.csv", shared_header, shared_rows(header, config, pool_rows, args.novel))
     for name, rows in splits.items():
-        write_split(
-            args.out / "splits" / f"{name}.csv",
-            shared_header,
-            shared_rows(header, config, rows, args.novel),
-        )
+        write_split(args.out / "splits" / f"{name}.csv", shared_header, shared_rows(header, config, rows, args.novel))
+
+    # The manifest records what the draw depended on, so the sample can be audited without repeating the 13.7 GB pass. `dropped_columns`
+    # names the raw columns the card leaves out, and `novel_attack_rows` counts, per split, the Flows of a held-out category.
+    kept = {*config["features"], LABEL_COLUMN, TESTBED_COLUMN}
+    label = header.index(LABEL_COLUMN)
     manifest: dict[str, object] = {
         "dataset": KAGGLE_DATASET,
         "source_file": {
@@ -204,7 +178,9 @@ def main() -> None:
         "novel_categories": list(args.novel),
         "rows_per_category": dict(counts.most_common()),
         "pool_rows": len(pool_rows),
-        **describe_splits(header, config, splits, args.novel),
+        "dropped_columns": [name for name in header if name not in kept],
+        "sizes": {name: len(rows) for name, rows in splits.items()},
+        "novel_attack_rows": {name: sum(fields[label] in args.novel for _, fields in rows) for name, rows in splits.items()},
         "drawn_on": datetime.now(UTC).date().isoformat(),
     }
     (args.out / "splits" / "SOURCE.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

@@ -43,7 +43,7 @@ def test_jwt_expiry_reads_the_claim_and_tolerates_garbage() -> None:
 
 def test_missing_token_file_points_to_the_login(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="log in once"):
-        chatgpt.TokenStore(tmp_path / "none.json").load()
+        chatgpt.TokenStore(tmp_path / "none.json").access_token()
 
 
 def test_valid_token_is_returned_without_refresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,7 +53,6 @@ def test_valid_token_is_returned_without_refresh(tmp_path: Path, monkeypatch: py
     monkeypatch.setattr(requests, "post", forbidden)
     store = store_at(tmp_path, expires_at=9_999_999_999)
     assert store.access_token() == "old"
-    assert not store.is_expired(now=0)
 
 
 def test_expired_token_is_refreshed_and_saved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

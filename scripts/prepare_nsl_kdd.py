@@ -13,10 +13,9 @@ difficulty. The card's `attack_names` gives each name its category: the 22 train
 """
 
 import argparse
-from collections.abc import Mapping
 from pathlib import Path
 
-from somids.dataset import Config, load_config, write_split
+from somids.dataset import Config, load_config, split_header, write_split
 
 TRAIN_FILE = "KDDTrain+.txt"
 TEST_FILE = "KDDTest+.txt"
@@ -45,32 +44,19 @@ def read_lines(path: Path, width: int) -> list[list[str]]:
     return rows
 
 
-def shared_row(
-    row_id: int,
-    fields: list[str],
-    categories: Mapping[str, str],
-    known: frozenset[str] | None,
-) -> list[object]:
-    """One row of the shared shape from the fields of one raw line.
-
-    `known` holds the attack names of the training file: a test name outside it is a novel attack. None, for the training file itself, marks
-    nothing.
-    """
-    *attributes, attack_name, _difficulty = fields
-    novel = known is not None and attack_name not in known
-    return [row_id, *attributes, categories[attack_name], int(novel)]
-
-
 def convert(source: Path, target: Path, config: Config, known: frozenset[str] | None) -> frozenset[str]:
-    """Write `source` as `target` in the shared shape; return the names it holds.
+    """Write `source` as `target` in the shared shape; return the attack names it holds.
 
-    `row_id` is the 0-based line index of the raw file, so a row can be checked against it with `sed -n`.
+    `row_id` is the 0-based line index of the raw file, so a row can be checked against it with `sed -n`. `known` holds the attack names of
+    the training file: a test name outside it is a novel attack, and None, for the training file itself, marks nothing.
     """
     categories = category_by_name(config)
     lines = read_lines(source, len(config["features"]) + len(EXTRA_COLUMNS))
-    rows = [[*shared_row(row_id, fields, categories, known), *fields[-2:]] for row_id, fields in enumerate(lines)]
-    header = ["row_id", *config["features"], "category", "novel_attack"]
-    write_split(target, [*header, *EXTRA_COLUMNS], rows)
+    rows = [
+        [row_id, *fields[:-2], categories[fields[-2]], int(known is not None and fields[-2] not in known), *fields[-2:]]
+        for row_id, fields in enumerate(lines)
+    ]
+    write_split(target, split_header(config, *EXTRA_COLUMNS), rows)
     print(f"{target}: {len(rows)} rows")
     return frozenset(fields[-2] for fields in lines)
 

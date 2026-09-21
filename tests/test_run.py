@@ -2,8 +2,8 @@
 
 import hashlib
 import json
+import re
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -148,9 +148,10 @@ def test_build_detector_knows_the_four_names(card: Path) -> None:
         run.build_detector(run.RunSpec("unknown", card, "smoke", (0,), (0,)), config)
 
 
-def test_run_id_has_timestamp_dataset_detector_and_split() -> None:
-    spec = run.RunSpec("llm:deepseek", NSL_KDD, "internal", (0,), (0,))
-    assert run.make_run_id(spec, datetime(2026, 9, 20, 18, 0, 0, tzinfo=UTC)) == "20260920T180000Z-nsl-kdd-llm-deepseek-internal"
+def test_run_dir_name_has_timestamp_dataset_detector_and_split(card: Path) -> None:
+    run_dir = run.execute(smoke_spec(card, "llm:deepseek"), FakeDetector(), dataset.load_config(card), FLOWS, TRAIN)
+    # The colon of `llm:deepseek` is not a path character, so the name carries it as a dash.
+    assert re.fullmatch(r"\d{8}T\d{6}Z-test-llm-deepseek-smoke", run_dir.name)
 
 
 def test_k_all_is_rf_only_and_rf_cannot_start_at_zero_shot() -> None:

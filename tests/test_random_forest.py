@@ -35,7 +35,7 @@ def test_vocabulary_and_vector_shape() -> None:
 
 
 def test_predict_fits_once_per_examples_object_and_derives_p_attack() -> None:
-    detector = rf.RandomForestDetector(VOCABULARY, "normal", n_estimators=10)
+    detector = rf.RandomForestDetector(VOCABULARY, "normal")
     examples = sample_examples(TRAIN, 2, 0, CATEGORIES)
 
     normal = detector.predict(TRAIN[0], examples)
@@ -43,7 +43,7 @@ def test_predict_fits_once_per_examples_object_and_derives_p_attack() -> None:
     second = detector.predict(TRAIN[4], examples)
 
     assert detector.fits == 1
-    assert (detector.name, detector.model) == ("rf", "sklearn-random-forest-10")
+    assert (detector.name, detector.model) == ("rf", f"sklearn-random-forest-{rf.N_ESTIMATORS}")
     assert detector.prompt_hash is None
     assert set(normal) == {"p_attack", "category_pred", "latency_ms", "train_time_ms"}
     assert 0.0 <= normal["p_attack"] < 0.5 < attack["p_attack"] <= 1.0

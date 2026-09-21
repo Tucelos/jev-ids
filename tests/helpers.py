@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from somids.dataset import Config, Flow, write_split
+from somids.dataset import Config, Flow, split_header, write_split
 from somids.records import Prediction
 
 # A three-feature card with one symbolic feature and three Categories.
@@ -79,7 +79,7 @@ def write_dataset(root: Path, config: Config, splits: Mapping[str, Sequence[Flow
     folder.mkdir(parents=True, exist_ok=True)
     card = folder / "dataset.json"
     card.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    header = ["row_id", *config["features"], "category", "novel_attack"]
+    header = split_header(config)
     for name, flows in splits.items():
         path = folder / "pool.csv" if name == "pool" else folder / "splits" / f"{name}.csv"
         rows = [[flow.row_id, *flow.attribute_values, flow.category, int(flow.novel_attack)] for flow in flows]

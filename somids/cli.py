@@ -2,7 +2,7 @@
 
 In reading order:
 
-- `parse_k`, `parse_ks`, `parse_ints`: the list arguments (`--k 0,1,all`).
+- `parse_k` and `parse_list`: the list arguments (`--k 0,1,all`).
 - `build_parser`: the three subcommands and their arguments.
 - `run_command`, `metrics_command`, `compare_command`: one handler per subcommand, each turning the parsed arguments into calls of `run` or
   `metrics`.
@@ -28,14 +28,13 @@ def parse_k(text: str) -> int | None:
     return None if text.strip() == "all" else int(text)
 
 
-def parse_ks(text: str) -> tuple[int | None, ...]:
-    """`--k 0,1,2,all`: a comma-separated list of k."""
+def parse_list(text: str) -> tuple[int | None, ...]:
+    """A comma-separated list of integers: `--k 0,1,2,all` and `--seeds 0,1,2`.
+
+    Both arguments are read the same way, so `all` is accepted for `--seeds` too, where it means nothing; nobody writes it and one parser is
+    worth that much looseness.
+    """
     return tuple(parse_k(part) for part in text.split(","))
-
-
-def parse_ints(text: str) -> tuple[int, ...]:
-    """`--seeds 0,1,2` as a tuple of integers."""
-    return tuple(int(part) for part in text.split(","))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,11 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--split", required=True, help="internal, pilot, smoke, ...")
     runner.add_argument(
         "--k",
-        type=parse_ks,
+        type=parse_list,
         default=(0, 1, 2, 4, 8, 16),
         help="examples per category, comma separated; `all` for the Random Forest",
     )
-    runner.add_argument("--seeds", type=parse_ints, default=(0, 1, 2), help="seeds of the example draws")
+    runner.add_argument("--seeds", type=parse_list, default=(0, 1, 2), help="seeds of the example draws")
     runner.add_argument("--reps", type=int, default=1, help="repetitions of each (k, seed) cell")
     runner.add_argument("--model", help="provider model id, for the LLM detectors")
     runner.set_defaults(handler=run_command)
