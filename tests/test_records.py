@@ -1,82 +1,61 @@
-"""Prediction records and the run files."""
-
-from __future__ import annotations
+"""The Prediction row: completion by the run loop, and the run files."""
 
 from pathlib import Path
 
-from somids import dataset
-from somids.detectors.base import Outcome
-from somids.records import RunContext, RunFiles, to_prediction
+from somids import records
+from tests.helpers import make_flow, make_prediction
 
-FLOW = dataset.Flow(
-    row_id=3,
-    text=",".join(["0"] * 41),
-    attack_name="apache2",
-    difficulty=5,
-    novel_attack=True,
-)
-CONTEXT = RunContext(
-    run_id="r1",
-    detector="jev",
-    split="smoke",
-    k=2,
-    n_examples=10,
-    seed=0,
-    rep=0,
-    batch=1,
-    format="csv",
-    prompt_version="v1",
-    prompt_hash="abc",
-)
+FLOW = make_flow(3, "dos", novel_attack=True)
+CELL = {
+    "run_id": "r1",
+    "dataset": "test",
+    "detector": "jev",
+    "model": "m",
+    "split": "smoke",
+    "prompt_hash": "abc",
+    "k": 2,
+    "seed": 0,
+    "rep": 0,
+    "n_examples": 6,
+}
 
 
-def make_outcome(p_attack: float | None, error: str | None = None) -> Outcome:
-    return Outcome(
-        flow=FLOW,
-        model="typesafe-ai/jev",
-        p_attack=p_attack,
-        category_pred="dos",
-        confidence=0.8,
-        probabilities={"dos": 0.9},
-        input_tokens=100,
-        output_tokens=5,
-        cache_tokens=None,
-        reasoning_tokens=None,
-        cost_usd=0.001,
-        billed_cost_usd=0.0,
-        latency_e2e_ms=500.0,
-        latency_provider_ms=200.0,
-        time_to_first_token_ms=None,
-        train_time_ms=None,
-        retries=1,
-        error=error,
-        request_id="req-1",
-        raw={"ok": True},
+def test_complete_prediction_adds_cell_truth_verdict_id_and_time() -> None:
+    row = records.complete_prediction({"p_attack": 0.7, "latency_ms": 12.0}, FLOW, CELL)
+    assert {name: row[name] for name in CELL} == CELL
+    assert (row["row_id"], row["y_true"], row["y_pred"]) == (3, 1, 1)
+    assert (row["category_true"], row["novel_attack"]) == ("dos", True)
+    assert (row["p_attack"], row["latency_ms"]) == (0.7, 12.0)
+    assert len(row["request_id"]) == 36
+    assert row["ts_utc"].endswith("+00:00")
+    # The Verdict is taken at p_attack >= 0.5, the same point for every Detector.
+    assert records.complete_prediction({"p_attack": 0.5}, FLOW, CELL)["y_pred"] == 1
+    assert records.complete_prediction({"p_attack": 0.49}, FLOW, CELL)["y_pred"] == 0
+    # A failed call has no p_attack at all; its Verdict is None (fail-open, Q12).
+    measured = {"error": "HTTP 500", "retries": 4}
+    failed = records.complete_prediction(measured, FLOW, CELL)
+    assert (failed["y_pred"], failed["error"], failed["retries"]) == (
+        None,
+        "HTTP 500",
+        4,
     )
 
 
-def test_to_prediction_merges_outcome_and_context() -> None:
-    prediction = to_prediction(make_outcome(0.7), CONTEXT, "2026-09-20T00:00:00Z")
-    assert prediction.y_true == 1
-    assert prediction.y_pred == 1
-    assert prediction.category_true == "dos"
-    assert prediction.novel_attack
-    assert prediction.key == (3, 2, 0, 0)
-    assert to_prediction(make_outcome(None, "HTTP 500"), CONTEXT, "t").y_pred is None
-
-
 def test_run_files_append_and_read_back(tmp_path: Path) -> None:
-    files = RunFiles(tmp_path / "run")
-    files.write_config({"spec": {"k": [0]}})
-    files.append(to_prediction(make_outcome(0.2), CONTEXT, "t1"), {"ok": True})
-    files.append(to_prediction(make_outcome(0.9), CONTEXT, "t2"), {"ok": False})
+    run_dir = tmp_path / "run"
+    records.write_config(run_dir, {"spec": {"k": [0], "results_dir": tmp_path}})
+    first = make_prediction(3, 1, 0.2, raw={"ok": True})
+    second = make_prediction(3, 1, 0.9, rep=1)  # no raw answer, like the forest
+    records.append_prediction(run_dir, first)
+    records.append_prediction(run_dir, second)
 
-    predictions = list(files.read_predictions())
-    assert [p.p_attack for p in predictions] == [0.2, 0.9]
-    assert files.existing_keys() == {(3, 2, 0, 0)}
-    assert files.config_path.read_text(encoding="utf-8").startswith("{")
-    assert files.responses_path.read_text(encoding="utf-8").count("\n") == 2
-
-
-def test_existing_keys_is_empty_for_a_fresh_run(tmp_path: Path) -> None:
-    assert RunFiles(tmp_path / "fresh").existing_keys() == set()
+    rows = records.read_predictions(run_dir)
+    assert [p["p_attack"] for p in rows] == [0.2, 0.9]
+    # Every key reaches the file but `raw`, which goes to responses.jsonl instead.
+    assert set(rows[0]) == set(first) - {"raw"}
+    assert set(rows[1]) == set(second)
+    assert (run_dir / "config.json").read_text(encoding="utf-8").startswith("{")
+    responses = (run_dir / "responses.jsonl").read_text(encoding="utf-8")
+    assert responses.count("\n") == 1
+    assert '"request_id": "q3", "response": {"ok": true}' in responses
+    assert records.read_predictions(tmp_path / "missing") == []

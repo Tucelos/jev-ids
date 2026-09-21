@@ -1,13 +1,18 @@
-"""Summary metrics over synthetic predictions."""
+"""Summary metrics and paired comparisons over synthetic rows."""
 
-from __future__ import annotations
-
-from pathlib import Path
+from collections.abc import Sequence
+from typing import Any
 
 import pytest
 
 from somids import metrics
-from somids.records import Prediction, RunFiles
+from somids.records import Prediction
+from tests.helpers import make_prediction
+
+# The `models` entries of prices.json used below.
+DEEPSEEK = {"input": 0.30, "cached_input": 0.006, "output": 1.20}
+JEV = {"input": 0.042, "cached_input": 0.042, "output": 0.0}
+PRICES = {"deepseek-flash": DEEPSEEK, "typesafe-ai/jev": JEV}
 
 
 def make(  # noqa: PLR0913
@@ -21,123 +26,187 @@ def make(  # noqa: PLR0913
     novel: bool = False,
     error: str | None = None,
     detector: str = "jev",
+    split: str = "internal",
 ) -> Prediction:
-    return Prediction(
-        run_id="r",
+    return make_prediction(
+        row_id,
+        y_true,
+        p_attack,
         detector=detector,
-        model="m",
-        split="internal",
-        row_id=row_id,
+        split=split,
         k=k,
-        n_examples=0 if k is None else 5 * k,
+        n_examples=0 if k is None else 3 * k,
         seed=seed,
         rep=rep,
-        batch=1,
-        format="csv",
-        prompt_version="v1",
-        prompt_hash="h",
-        y_true=y_true,
-        y_pred=None if p_attack is None else int(p_attack >= 0.5),
-        p_attack=p_attack,
-        category_true="dos" if y_true else "normal",
-        category_pred=None,
-        confidence=None,
         novel_attack=novel,
-        input_tokens=100,
-        output_tokens=10,
-        cache_tokens=None,
-        reasoning_tokens=None,
-        cost_usd=None if error else 0.001,
-        billed_cost_usd=0.0,
-        latency_e2e_ms=None if error else 500.0,
-        latency_provider_ms=None if error else 200.0,
-        time_to_first_token_ms=None,
-        train_time_ms=None,
-        retries=0,
         error=error,
+        usage={} if error else {"input_tokens": 100, "output_tokens": 10},
         request_id=f"q{row_id}-{seed}-{rep}",
-        ts_utc="t",
     )
 
 
-def test_f1_and_recalls_treat_errors_as_normal() -> None:
-    cell = [
-        make(1, 1, 0.9, novel=True),
-        make(2, 1, 0.2, novel=True),
-        make(3, 1, None, error="HTTP 429"),
-        make(4, 0, 0.1),
-        make(5, 0, 0.7),
-    ]
-    # tp = 1 (row 1), fp = 1 (row 5), fn = 2 (rows 2 and 3): f1 = 2 / (2 + 1 + 2)
-    assert metrics.f1_attack(cell) == pytest.approx(0.4)
-    assert metrics.recall(cell, novel=True) == 0.5
-    assert metrics.recall(cell, novel=False) == 0.0
-    assert metrics.f1_attack([make(4, 0, 0.1)]) is None
-    assert metrics.recall([make(4, 0, 0.1)], novel=True) is None
+# tp = rows 1 and 6, fp = row 5, fn = rows 2 and 3 (the error row counts as normal), tn = row 4; rows 1 and 2 are the novel attacks, 3 and 6
+# the known.
+CELL = [
+    make(1, 1, 0.9, novel=True),
+    make(2, 1, 0.2, novel=True),
+    make(3, 1, None, error="HTTP 429"),
+    make(4, 0, 0.1),
+    make(5, 0, 0.7),
+    make(6, 1, 0.8),
+]
 
 
-def test_summarize_aggregates_cells_and_stability() -> None:
+def test_scores_count_a_row_without_verdict_as_normal_and_as_an_error() -> None:
+    scores = metrics.scores(CELL)
+    assert scores["precision"] == pytest.approx(2 / 3)
+    assert scores["recall"] == pytest.approx(2 / 4)
+    assert scores["f1"] == pytest.approx(4 / 7)
+    assert scores["recall_novel"] == 0.5
+    assert scores["recall_known"] == 0.5
+    assert scores["error_rate"] == pytest.approx(1 / 6)
+    empty = metrics.scores([make(4, 0, 0.1)])
+    assert (empty["f1"], empty["recall_novel"], empty["error_rate"]) == (None, None, 0)
+
+
+def test_cost_usd_per_1m_prices_the_usage_at_list_price() -> None:
+    # 1,001 input tokens of Jev: 42.042 USD per 1M such calls, the gateway's own `marketCost` of the pilot row (4.2042e-05 USD) times
+    # 10⁶.
+    jev_row = make_prediction(1, 1, 0.9, model="typesafe-ai/jev")
+    jev_row["usage"] = {"input_tokens": 1001, "output_tokens": 77}
+    assert metrics.cost_usd_per_1m(jev_row, PRICES) == pytest.approx(42.042)
+    # Cached input tokens are a subset of the input and pay the cache rate.
+    cached = make_prediction(2, 1, 0.9, model="deepseek-flash")
+    cached["usage"] = {"input_tokens": 1000, "cache_read_tokens": 800, "output_tokens": 20}
+    expected = 200 * 0.30 + 800 * 0.006 + 20 * 1.20
+    assert metrics.cost_usd_per_1m(cached, PRICES) == pytest.approx(expected)
+    # No usage (the Random Forest, or an error row) or no list price: no cost.
+    assert metrics.cost_usd_per_1m({"model": "deepseek-flash"}, PRICES) is None
+    unpriced = make_prediction(3, 1, 0.9, model="m")
+    assert metrics.cost_usd_per_1m(unpriced, PRICES) is None
+
+
+def test_usage_averages_every_number_present_and_ignores_the_rest() -> None:
+    rows = [make(1, 1, 0.9), make(2, 1, None, error="boom")]
+    for row in rows:
+        row["model"] = "deepseek-flash"
+    # An Agno row carries more than tokens; its nested details are not numbers.
+    rows[0]["usage"] |= {"duration": 2.5, "details": {"model": []}}
+    summary = metrics.usage(rows, PRICES)
+    assert summary["input_tokens_mean"] == 100.0
+    assert summary["output_tokens_mean"] == 10.0
+    assert summary["duration_mean"] == 2.5
+    assert "details_mean" not in summary
+    assert summary["cost_usd_per_1m"] == pytest.approx(100 * 0.30 + 10 * 1.20)
+    assert summary["latency_ms_mean"] == 500.0
+    # A row without any usage or latency (the Random Forest) gives only missing values.
+    assert set(metrics.usage([{"y_true": 1}], PRICES).values()) == {None}
+    assert metrics.mean([]) is None
+    assert metrics.sd([1.0]) is None
+
+
+def test_summarize_has_one_row_per_group_averaged_over_cells() -> None:
     predictions = [
-        make(1, 1, 0.9, seed=0, rep=0),
-        make(2, 0, 0.1, seed=0, rep=0),
-        make(1, 1, 0.4, seed=0, rep=1),
-        make(2, 0, 0.1, seed=0, rep=1),
-        make(1, 1, 0.9, seed=1, rep=0),
-        make(2, 0, 0.6, seed=1, rep=0),
+        make(1, 1, 0.9, seed=0),
+        make(2, 0, 0.1, seed=0),
+        make(1, 1, 0.4, seed=1),
+        make(2, 0, 0.1, seed=1),
         make(1, 1, None, k=0, error="boom"),
     ]
-    summaries = metrics.summarize(predictions)
-    assert [s.k for s in summaries] == [0, 1]
-    zero_shot, one_shot = summaries
-    assert zero_shot.error_rate == 1.0
-    assert zero_shot.cost_usd_per_1m is None
-    assert one_shot.cells == 3
-    assert one_shot.flows == 2
-    assert one_shot.f1_mean == pytest.approx((1.0 + 0.0 + 2 / 3) / 3)
-    assert one_shot.f1_sd is not None
-    assert one_shot.cost_usd_per_1m == pytest.approx(1000.0)
-    assert one_shot.latency_e2e_ms_mean == 500.0
-    # Flow 1 flips between rep 0 and rep 1 for seed 0; flow 2 does not.
-    assert one_shot.verdict_flip_rate == 0.5
-    # Flow 1's sd across reps averaged with flow 2's sd of 0.
-    expected_sd = metrics.sd_of([0.9, 0.4])
-    assert expected_sd is not None
-    assert one_shot.p_attack_sd_mean == pytest.approx(expected_sd / 2)
+    for prediction in predictions:
+        prediction["model"] = "typesafe-ai/jev"
+    zero_shot, one_shot = metrics.summarize(predictions)
+    assert (zero_shot["k"], one_shot["k"]) == (0, 1)
+    assert list(one_shot)[:5] == ["dataset", "detector", "model", "split", "k"]
+    assert one_shot["dataset"] == "test"
+    assert (one_shot["cells"], one_shot["flows"], one_shot["predictions"]) == (2, 2, 4)
+    # The seed 0 cell has F1 = 1 and the seed 1 cell F1 = 0.
+    assert one_shot["f1_mean"] == pytest.approx(0.5)
+    assert one_shot["f1_sd"] == pytest.approx(metrics.sd([1.0, 0.0]))
+    assert one_shot["recall_known_mean"] == 0.5
+    assert one_shot["recall_novel_mean"] is None
+    assert one_shot["cost_usd_per_1m"] == pytest.approx(100 * 0.042)
+    assert zero_shot["error_rate_mean"] == 1.0
+    assert zero_shot["cost_usd_per_1m"] is None
+    assert zero_shot["f1_sd"] is None
 
 
-def test_stability_is_undefined_without_repetitions() -> None:
-    summary = metrics.summarize([make(1, 1, 0.9), make(2, 0, 0.1)])[0]
-    assert summary.verdict_flip_rate is None
-    assert summary.p_attack_sd_mean is None
-    assert summary.f1_sd is None
+def test_summarize_orders_k_all_last_and_groups_old_rows_without_dataset() -> None:
+    old = make(1, 1, 0.9, k=None)
+    del old["dataset"]
+    rows = metrics.summarize([old, make(1, 1, 0.9, k=16)])
+    assert [(row["dataset"], row["k"]) for row in rows] == [("test", 16), (None, None)]
+    assert metrics.summarize([]) == []
 
 
-def test_report_prints_markdown_and_writes_csv(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    files = RunFiles(tmp_path / "run-a")
-    for prediction in [
-        make(1, 1, 0.9),
-        make(2, 0, 0.1),
-        make(3, 0, 0.8, detector="rf"),
-    ]:
-        files.append(prediction, {})
-
-    target = metrics.report([tmp_path / "run-a"])
-
-    out = capsys.readouterr().out
-    assert out.startswith("| detector | k | cells | f1_mean |")
-    assert "| jev | 1 | 1 | 1 |" in out
-    assert "| rf | 1 | 1 | 0 |" in out
-    assert target == tmp_path / "run-a" / "summary.csv"
-    lines = target.read_text(encoding="utf-8").splitlines()
-    assert lines[0].startswith("detector,model,split,k,")
-    assert len(lines) == 3
+def test_select_keeps_novel_or_known_attacks() -> None:
+    rows = [make(0, 1, 1.0, novel=True), make(1, 1, 0.0), make(2, 0, 0.0)]
+    assert [p["row_id"] for p in metrics.select(rows, "all")] == [0, 1, 2]
+    assert [p["row_id"] for p in metrics.select(rows, "novel")] == [0]
+    assert [p["row_id"] for p in metrics.select(rows, "known")] == [1]
 
 
-def test_report_over_several_runs_writes_next_to_them(tmp_path: Path) -> None:
-    for name in ("run-a", "run-b"):
-        RunFiles(tmp_path / name).append(make(1, 1, 0.9), {})
-    target = metrics.report([tmp_path / "run-a", tmp_path / "run-b"])
-    assert target == tmp_path / "summary.csv"
-    assert metrics.to_markdown([]).count("\n") == 2
+def runs() -> tuple[list[Prediction], list[Prediction]]:
+    """Flows 0..5 are attacks, 6..9 normals. A is right where B is wrong on 0, 1, 2 and 6; B is right where A is wrong on 3; both are wrong
+    on 5 and 7.
+    """
+    a_pred = {0: 1, 1: 1, 2: 1, 3: 0, 4: 1, 5: 0, 6: 0, 7: 1, 8: 0, 9: 0}
+    b_pred = {0: 0, 1: 0, 2: 0, 3: 1, 4: 1, 5: 0, 6: 1, 7: 1, 8: 0, 9: 0}
+    a = [make(i, int(i < 6), float(a_pred[i]), k=0, detector="a") for i in range(10)]
+    b = [make(i, int(i < 6), float(b_pred[i]), k=0, detector="b") for i in range(10)]
+    return a, b
+
+
+def cells_of(rows: Sequence[dict[str, Any]]) -> list[tuple[Any, ...]]:
+    """(k_a, k_b, rep, pairs) of each compare row."""
+    return [(r["k_a"], r["k_b"], r["rep"], r["pairs"]) for r in rows]
+
+
+def test_compare_pairs_by_flow_k_seed_and_rep_and_drops_unmatched() -> None:
+    a, b = runs()
+    assert cells_of(metrics.compare([*a, make(99, 1, 1.0, k=8)], b)) == [(0, 0, 0, 10)]
+
+
+def test_compare_with_ks_pairs_across_k_and_keeps_reps_apart() -> None:
+    a, b = runs()
+    a_rep1 = [make(p["row_id"], p["y_true"], p["p_attack"], k=0, rep=1) for p in a]
+    b_all = [make(p["row_id"], p["y_true"], p["p_attack"], k=None) for p in b]
+    b_all += [make(p["row_id"], p["y_true"], p["p_attack"], k=None, rep=1) for p in b]
+    assert metrics.compare(a_rep1, b_all) == []  # without ks the k must match
+    rows = metrics.compare([*a, *a_rep1], b_all, across_k=(0, None))
+    assert cells_of(rows) == [(0, None, 0, 10), (0, None, 1, 10)]
+
+
+def test_mcnemar_exact_is_two_sided_and_one_without_discordance() -> None:
+    assert metrics.mcnemar_exact(0, 0) == 1.0
+    assert metrics.mcnemar_exact(5, 5) == 1.0
+    assert metrics.mcnemar_exact(5, 1) == 0.21875
+    assert metrics.mcnemar_exact(4, 1) == pytest.approx(2 * 6 / 32)
+    assert metrics.mcnemar_exact(10, 0) == pytest.approx(2 / 1024)
+
+
+def test_compare_orders_k_and_fills_every_field() -> None:
+    a, b = runs()
+    a_k8 = [make(i, 1, 1.0, k=8, detector="a") for i in range(2)]
+    b_k8 = [make(i, 1, 0.0, k=8, detector="b") for i in range(2)]
+    results = metrics.compare([*a_k8, *a], [*b_k8, *b])
+    assert [(r["k_a"], r["k_b"], r["rep"]) for r in results] == [(0, 0, 0), (8, 8, 0)]
+    first = results[0]
+    assert list(first) == ["k_a", "k_b", "rep", "pairs", "discordant", "a_right", "b_right", "mcnemar_p", "f1_a", "f1_b"]
+    assert (first["pairs"], first["discordant"]) == (10, 5)
+    assert (first["a_right"], first["b_right"]) == (4, 1)
+    assert first["mcnemar_p"] == pytest.approx(2 * 6 / 32)
+    assert first["f1_a"] == pytest.approx(8 / 11)
+    assert first["f1_b"] == pytest.approx(4 / 10)
+
+
+def test_compare_pairs_old_rows_with_new_ones_and_unrelated_runs_give_nothing() -> None:
+    a, b = runs()
+    # Rows written before the `dataset` field existed still pair with new rows.
+    old = [dict(p) for p in a]
+    for p in old:
+        del p["dataset"]
+    assert len(metrics.compare(old, b)) == 1
+    # Another split shares no row_id: nothing to pair, as with an empty run.
+    assert metrics.compare(a, [make(99, 1, 1.0, split="hard")]) == []
+    assert metrics.compare(a, []) == []

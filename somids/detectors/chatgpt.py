@@ -1,15 +1,16 @@
-"""OpenAI GPT-5.x through the ChatGPT Codex backend, signed in with the Codex
-OAuth tokens of the user's original `ChatGPTSubscriptionModel`.
+"""OpenAI GPT-5.x through the ChatGPT Codex backend, with the Codex OAuth tokens.
 
-This is the minimal, typed re-implementation agreed in the grilling (Q28, Q34):
-the same environment variables and token file as the original module, token
-refresh, `base_url`, `store=False`, encrypted reasoning, `reasoning_summary`,
-`instructions` injection and the aggregation of the forced stream. The browser
-login is not here: run it once through the original module if the refresh
-token ever expires.
+In reading order:
+
+- `jwt_expiry` and `TokenStore`: the OAuth tokens on disk, read and refreshed through the Codex client id.
+- `ChatGPTSubscriptionModel`: Agno's `OpenAIResponses` routed to the backend, signed with the token and carrying the `instructions` preamble
+  (Q29).
+- `aggregate`, `append_text`, `merge_metadata`: the backend only streams, so the deltas are merged back into one response.
+
+This is the minimal, typed re-implementation agreed in the grilling (Q28, Q34) of the user's original `ChatGPTSubscriptionModel`: the same
+environment variables and token file, so a login done there is reused here. The browser login is not here: run it once through the original
+module if the refresh token expires.
 """
-
-from __future__ import annotations
 
 import base64
 import json
@@ -18,7 +19,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import requests
 from agno.models.message import Message
@@ -32,26 +33,26 @@ BACKEND_BASE_URL = "https://chatgpt.com/backend-api/codex"
 CLIENT_ID_VAR = "CHATGPT_CLIENT_ID"
 OAUTH_FILE_VAR = "CHATGPT_TOKEN_PATH"
 DEFAULT_OAUTH_FILE = Path.home() / ".chatgpt_oauth" / "tokens.json"
+# A token is renewed this long before it expires, so it never dies in the middle of a call that was started while it was still valid.
 REFRESH_MARGIN_SECONDS = 300.0
 JWT_PARTS = 3
-# Tried first (grilling Q29); the backend validates that `instructions` exists.
-NEUTRAL_PREAMBLE = (
-    "You are a classifier for network intrusion detection. Follow the developer "
-    "instructions and answer only in the requested JSON format."
-)
-# Used only if the backend rejects the neutral preamble.
-CODEX_PREAMBLE = (
-    "You are Codex, based on GPT-5. You are running as a coding agent in the "
-    "Codex CLI on a user's computer."
+# Sent as `instructions` with every request: the backend requires the field (grilling Q29). Fixed after 1,685 calls accepted it (§14, cut
+# 3); if the backend ever rejects it, the Codex CLI's own text is in the grilling, §6.
+PREAMBLE = (
+    "You are a classifier for network intrusion detection. Follow the developer instructions and answer only in the requested JSON format."
 )
 
 
 def oauth_file() -> Path:
+    """The token file: CHATGPT_TOKEN_PATH, or the original module's default path."""
     return Path(os.environ.get(OAUTH_FILE_VAR, str(DEFAULT_OAUTH_FILE))).expanduser()
 
 
 def jwt_expiry(token: str) -> float | None:
-    """The `exp` claim of a JWT, read without verifying the signature."""
+    """The `exp` claim of a JWT, read without verifying the signature.
+
+    The token is only inspected to know when to refresh it, never trusted for anything else, so the signature does not matter here.
+    """
     parts = token.split(".")
     if len(parts) != JWT_PARTS:
         return None
@@ -64,33 +65,38 @@ def jwt_expiry(token: str) -> float | None:
     return None if exp is None else float(exp)
 
 
-@dataclass(slots=True)
 class TokenStore:
-    """The OAuth tokens on disk, refreshed through the Codex client id."""
+    """The OAuth tokens on disk, refreshed through the Codex client id.
 
-    path: Path = field(default_factory=oauth_file)
-    tokens: dict[str, Any] = field(default_factory=dict[str, Any])
+    The file is the one the original module writes, so both modules stay compatible and a login done there is reused here (grilling Q28).
+    """
 
-    def load(self) -> TokenStore:
+    def __init__(self, path: Path | None = None) -> None:
+        """Remember where the tokens live; nothing is read until they are needed."""
+        self.path = oauth_file() if path is None else path
+        self.tokens: dict[str, Any] = {}
+
+    def load(self) -> Self:
+        """Read the token file; a missing file points at the login that creates it."""
         if not self.path.exists():
-            msg = (
-                f"no OAuth tokens at {self.path}; log in once with the original module"
-            )
-            raise FileNotFoundError(msg)
+            raise FileNotFoundError(f"no OAuth tokens at {self.path}; log in once with the original module")
         self.tokens = json.loads(self.path.read_text(encoding="utf-8"))
         return self
 
     def save(self) -> None:
+        """Write the tokens back, readable by the owner only: they are bearer tokens."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.tokens, indent=2), encoding="utf-8")
         self.path.chmod(0o600)
 
     def is_expired(self, now: float | None = None) -> bool:
+        """Whether the access token expires within REFRESH_MARGIN_SECONDS of `now`."""
         expires_at = float(self.tokens.get("expires_at", 0.0))
-        current = now if now is not None else time.time()
+        current = time.time() if now is None else now
         return current + REFRESH_MARGIN_SECONDS >= expires_at
 
     def access_token(self) -> str:
+        """A valid access token, loading and refreshing the file as needed."""
         if not self.tokens:
             self.load()
         if self.is_expired():
@@ -98,10 +104,10 @@ class TokenStore:
         return str(self.tokens["access_token"])
 
     def refresh(self) -> None:
+        """Exchange the refresh token for a new access token and save the file."""
         client_id = os.environ.get(CLIENT_ID_VAR)
         if not client_id:
-            msg = f"{CLIENT_ID_VAR} is not set"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{CLIENT_ID_VAR} is not set")
         response = requests.post(
             OAUTH_REFRESH_URL,
             data={
@@ -114,17 +120,19 @@ class TokenStore:
         )
         if not response.ok:
             detail = response.text[:200]
-            msg = f"token refresh failed: HTTP {response.status_code} {detail}"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"token refresh failed: HTTP {response.status_code} {detail}")
         data: dict[str, Any] = response.json()
         access = str(data["access_token"])
         self.tokens["access_token"] = access
+        # The JWT says when it expires; without a readable claim assume one hour.
         self.tokens["expires_at"] = jwt_expiry(access) or time.time() + 3600
         if "refresh_token" in data:
             self.tokens["refresh_token"] = data["refresh_token"]
         self.save()
 
 
+# A dataclass because Agno's model classes are dataclasses and this one adds fields to `OpenAIResponses`; it is the only place where that is
+# required.
 @dataclass
 class ChatGPTSubscriptionModel(OpenAIResponses):
     """Agno model routed to the ChatGPT Codex backend with an OAuth token."""
@@ -132,33 +140,34 @@ class ChatGPTSubscriptionModel(OpenAIResponses):
     id: str = "gpt-5.6-luna"
     name: str = "ChatGPTSubscription"
     provider: str = "ChatGPT-Subscription"
-    preamble: str = NEUTRAL_PREAMBLE
+    preamble: str = PREAMBLE
     token_store: TokenStore = field(default_factory=TokenStore)
     _last_token: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
+        """Apply what the Codex backend requires of every request."""
         super().__post_init__()
-        # What the Codex backend requires of every request.
         self.base_url = BACKEND_BASE_URL
         self.store = False
         self.include = ["reasoning.encrypted_content"]
         self.reasoning_summary = "auto"
-        self.set_preamble(self.preamble)
-
-    def set_preamble(self, preamble: str) -> None:
-        """The backend requires `instructions`; whatever is sent is recorded."""
-        self.preamble = preamble
+        # The backend requires `instructions`; the preamble goes there (Q29).
         params: dict[str, Any] = dict(self.request_params or {})
-        params["instructions"] = preamble
+        params["instructions"] = self.preamble
         self.request_params = params
 
     def _get_client_params(self) -> dict[str, Any]:
+        """Agno's hook for the OpenAI client settings: here the token is the key.
+
+        A refreshed token invalidates the cached clients so the next request is signed with the new one.
+        """
         token = self.token_store.access_token()
         if token != self._last_token:
             self._last_token = token
             self.client = None
             self.async_client = None
         params: dict[str, Any] = {"api_key": token, "base_url": self.base_url}
+        # The parent's optional client settings, passed through only when set.
         for name in ("timeout", "max_retries", "default_headers", "default_query"):
             value = getattr(self, name)
             if value is not None:
@@ -195,26 +204,28 @@ def aggregate(deltas: Any) -> ModelResponse:
     """Merge streamed deltas: text, reasoning, usage and provider data."""
     merged = ModelResponse()
     merged.role = "assistant"
-    content: list[str] = []
-    reasoning: list[str] = []
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
     for delta in deltas:
-        _collect_text(delta, content, reasoning)
-        _collect_metadata(delta, merged)
-    if content:
-        merged.content = "".join(content)
-    if reasoning:
-        merged.reasoning_content = "".join(reasoning)
+        append_text(delta, content_parts, reasoning_parts)
+        merge_metadata(delta, merged)
+    if content_parts:
+        merged.content = "".join(content_parts)
+    if reasoning_parts:
+        merged.reasoning_content = "".join(reasoning_parts)
     return merged
 
 
-def _collect_text(delta: Any, content: list[str], reasoning: list[str]) -> None:
+def append_text(delta: Any, content_parts: list[str], reasoning_parts: list[str]) -> None:
+    """Collect the text and reasoning pieces of one delta."""
     if delta.content is not None:
-        content.append(delta.content)
+        content_parts.append(delta.content)
     if delta.reasoning_content is not None:
-        reasoning.append(delta.reasoning_content)
+        reasoning_parts.append(delta.reasoning_content)
 
 
-def _collect_metadata(delta: Any, merged: ModelResponse) -> None:
+def merge_metadata(delta: Any, merged: ModelResponse) -> None:
+    """Keep the last usage report and every provider field seen in the stream."""
     if delta.response_usage is not None:
         merged.response_usage = delta.response_usage
     if delta.provider_data is not None:

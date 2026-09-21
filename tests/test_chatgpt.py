@@ -1,7 +1,5 @@
 """OAuth token store and the Codex-backend model adapter."""
 
-from __future__ import annotations
-
 import base64
 import json
 from pathlib import Path
@@ -15,6 +13,7 @@ from agno.models.openai.responses import OpenAIResponses
 from agno.models.response import ModelResponse
 
 from somids.detectors import chatgpt
+from tests.helpers import FakeResponse
 
 
 def jwt_with_exp(exp: int) -> str:
@@ -26,21 +25,14 @@ def store_at(tmp_path: Path, expires_at: float) -> chatgpt.TokenStore:
     path = tmp_path / "tokens.json"
     path.write_text(
         json.dumps(
-            {"access_token": "old", "refresh_token": "r1", "expires_at": expires_at}  # noqa: S105
+            {
+                "access_token": "old",
+                "refresh_token": "r1",
+                "expires_at": expires_at,
+            }  # noqa: S105
         )
     )
     return chatgpt.TokenStore(path)
-
-
-class FakeResponse:
-    def __init__(self, status_code: int, body: dict[str, Any]) -> None:
-        self.status_code = status_code
-        self.ok = status_code < 400
-        self.text = json.dumps(body)
-        self._body = body
-
-    def json(self) -> dict[str, Any]:
-        return self._body
 
 
 def test_jwt_expiry_reads_the_claim_and_tolerates_garbage() -> None:
@@ -54,9 +46,7 @@ def test_missing_token_file_points_to_the_login(tmp_path: Path) -> None:
         chatgpt.TokenStore(tmp_path / "none.json").load()
 
 
-def test_valid_token_is_returned_without_refresh(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_valid_token_is_returned_without_refresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("no refresh expected")
 
@@ -66,15 +56,11 @@ def test_valid_token_is_returned_without_refresh(
     assert not store.is_expired(now=0)
 
 
-def test_expired_token_is_refreshed_and_saved(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_expired_token_is_refreshed_and_saved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     new_token = jwt_with_exp(1_900_000_000)
     seen: list[dict[str, Any]] = []
 
-    def fake_post(
-        _url: str, *, data: dict[str, Any], headers: dict[str, str], timeout: int
-    ) -> FakeResponse:
+    def fake_post(_url: str, *, data: dict[str, Any], headers: dict[str, str], timeout: int) -> FakeResponse:
         seen.append({"data": data, "headers": headers, "timeout": timeout})
         return FakeResponse(200, {"access_token": new_token, "refresh_token": "r2"})  # noqa: S105
 
@@ -96,9 +82,7 @@ def unauthorized(*_args: object, **_kwargs: object) -> FakeResponse:
     return FakeResponse(401, {"error": "bad"})
 
 
-def test_refresh_needs_the_client_id_and_a_good_answer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_refresh_needs_the_client_id_and_a_good_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = store_at(tmp_path, expires_at=1.0)
     monkeypatch.delenv(chatgpt.CLIENT_ID_VAR, raising=False)
     with pytest.raises(RuntimeError, match=chatgpt.CLIENT_ID_VAR):
@@ -111,27 +95,18 @@ def test_refresh_needs_the_client_id_and_a_good_answer(
 
 def test_model_injects_the_preamble_and_the_token(tmp_path: Path) -> None:
     store = store_at(tmp_path, expires_at=9_999_999_999)
-    model = chatgpt.ChatGPTSubscriptionModel(
-        id="gpt-5.6-luna", reasoning_effort="none", token_store=store
-    )
+    model = chatgpt.ChatGPTSubscriptionModel(id="gpt-5.6-luna", reasoning_effort="none", token_store=store)
 
     assert model.base_url == chatgpt.BACKEND_BASE_URL
     assert model.store is False
     assert model.include == ["reasoning.encrypted_content"]
-    assert model.request_params == {"instructions": chatgpt.NEUTRAL_PREAMBLE}
+    assert model.request_params == {"instructions": chatgpt.PREAMBLE}
     params = model._get_client_params()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     assert params["api_key"] == "old"
     assert params["base_url"] == chatgpt.BACKEND_BASE_URL
 
-    model.set_preamble(chatgpt.CODEX_PREAMBLE)
-    assert model.preamble == chatgpt.CODEX_PREAMBLE
-    assert model.request_params is not None
-    assert model.request_params["instructions"] == chatgpt.CODEX_PREAMBLE
 
-
-def test_invoke_aggregates_the_forced_stream(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_invoke_aggregates_the_forced_stream(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_stream(_self: object, **_kwargs: object) -> Any:
         first = ModelResponse()
         first.content = '{"verdict": '
@@ -144,13 +119,9 @@ def test_invoke_aggregates_the_forced_stream(
         yield second
 
     monkeypatch.setattr(OpenAIResponses, "invoke_stream", fake_stream)
-    model = chatgpt.ChatGPTSubscriptionModel(
-        token_store=store_at(tmp_path, expires_at=9_999_999_999)
-    )
+    model = chatgpt.ChatGPTSubscriptionModel(token_store=store_at(tmp_path, expires_at=9_999_999_999))
 
-    merged = model.invoke(
-        [Message(role="user", content="hi")], Message(role="assistant")
-    )
+    merged = model.invoke([Message(role="user", content="hi")], Message(role="assistant"))
 
     assert merged.content == '{"verdict": "attack"}'
     assert merged.reasoning_content == "thinking"

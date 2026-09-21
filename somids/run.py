@@ -1,273 +1,199 @@
-"""The main loop of a run: k, then seed, then rep, then the Flows of the split,
-one request at a time; detectors do their own retries and timing.
+"""One run: a Detector over one split, cell by cell, Flow by Flow.
+
+In reading order:
+
+- `RunSpec`: what the CLI resolved for one run.
+- `load_prompt`: any prompt file as text plus its sha256; Jev and the LLMs load their files (`jev.json`, `llm.md`) through it alike.
+- `build_detector` and `check_spec`: the Detector named in the spec, and the two combinations of Detector and k that would only waste calls.
+- `sample_examples`: k Examples per Category, seeded and nested across k (Q5).
+- `execute` and `run_cell`: the loop itself and the three files of the run.
+- `run_from_spec`: the CLI entry that strings the above together.
+
+The loop runs k outermost, then seed, then rep, then every Flow of the split (grilling Q11), so the prompt prefix stays constant for as long
+as possible and provider prefix caches get their best chance. One request judges one Flow (B = 1, §14). A call that fails ends as a row with
+`error`, never as a crash, and the run goes on (Q31).
 """
 
-from __future__ import annotations
-
+import hashlib
 import itertools
-from collections.abc import Iterator, Sequence
-from dataclasses import asdict, dataclass, field
+import random
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from somids import dataset
-from somids.dataset import Example, Flow, RowFormat
-from somids.detectors import chatgpt, jev, llm, random_forest
-from somids.detectors.base import Detector, Outcome
-from somids.prices import load_prices
-from somids.prompt import Prompt, load_prompt
-from somids.records import Key, RunContext, RunFiles, to_prediction
+from somids import ROOT, dataset
+from somids.dataset import Config, Flow
+from somids.detectors import random_forest
+from somids.detectors.jev import JevDetector
+from somids.detectors.llm import LLMDetector
+from somids.detectors.random_forest import RandomForestDetector
+from somids.records import append_prediction, complete_prediction, write_config
 
-RESULTS_DIR = dataset.ROOT / "results"
-PROGRESS_EVERY = 50
+RESULTS_DIR = ROOT / "results"
+
+# The three detectors share no base class; the run loop only needs `name`, `model`, `prompt_hash` and `predict`, which each of them has.
+Detector = JevDetector | LLMDetector | RandomForestDetector
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RunSpec:
-    """Everything the CLI resolved for one run."""
+    """Everything the CLI resolved for one run; a parameter bundle, nothing more.
+
+    Attributes:
+        detector: `jev`, `llm:deepseek`, `llm:chatgpt` or `rf`.
+        dataset: the card of the dataset, `data/<name>/dataset.json`.
+        split: the split to judge, a file under `data/<name>/splits/`.
+        k_values: Examples per Category to try; None means the whole pool (rf).
+        seeds: the seeds of the Example draws.
+        reps: how often each (k, seed) cell is repeated, for stability.
+        model_id: the provider model, for the LLM detectors; None means default.
+        results_dir: where run directories are created.
+    """
 
     detector: str
+    dataset: Path
     split: str
-    ks: tuple[int | None, ...]  # None = all of Train+ (Random Forest only)
+    k_values: tuple[int | None, ...]
     seeds: tuple[int, ...]
     reps: int = 1
-    batch: int = 1
-    fmt: RowFormat = "csv"
-    prompt_version: str = "v1"
-    model: str | None = None
-    resume: str | None = None
-    allow_paper: bool = False
+    model_id: str | None = None
+    results_dir: Path = RESULTS_DIR
 
 
-@dataclass(frozen=True, slots=True)
-class RunData:
-    """Flows to judge and Train+ Flows to draw Examples from; None means load."""
+def load_prompt(path: Path) -> dict[str, Any]:
+    """A prompt file as `text`, plus the `sha256` of its bytes.
 
-    flows: Sequence[Flow] | None = None
-    train: Sequence[Flow] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Cell:
-    """One (k, seed, rep) combination of the run."""
-
-    k: int | None
-    seed: int
-    rep: int
-    n_examples: int
+    The hash goes into config.json and into every row as `prompt_hash`, so any change of wording is visible in the records.
+    """
+    raw_bytes = path.read_bytes()
+    sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    return {"text": raw_bytes.decode("utf-8"), "sha256": sha256}
 
 
-@dataclass(slots=True)
-class Progress:
-    calls: int = 0
-    predictions: int = 0
-    errors: int = 0
-    cost_usd: float = 0.0
-
-    def add(self, outcomes: Sequence[Outcome]) -> None:
-        self.calls += 1
-        for outcome in outcomes:
-            self.predictions += 1
-            self.errors += outcome.error is not None
-            self.cost_usd += outcome.cost_usd or 0.0
-
-    def line(self) -> str:
-        return (
-            f"calls={self.calls} predictions={self.predictions} errors={self.errors} "
-            f"list_cost_usd={self.cost_usd:.4f}"
-        )
+def build_detector(spec: RunSpec, config: Config) -> Detector:
+    """The Detector named in the spec; Jev and the LLMs get their prompt file."""
+    prompts = ROOT / "prompts" / config["name"]
+    if spec.detector == "jev":
+        return JevDetector(load_prompt(prompts / "jev.json"))
+    if spec.detector in ("llm:deepseek", "llm:chatgpt"):
+        provider = spec.detector.removeprefix("llm:")
+        return LLMDetector(load_prompt(prompts / "llm.md"), provider, spec.model_id)
+    if spec.detector == "rf":
+        # The one-hot vocabulary comes from the whole pool, never from the Examples.
+        pool = dataset.load_split(config["dir"] / "pool.csv", config)
+        return RandomForestDetector(random_forest.vocabulary(pool, config), config["benign"])
+    raise NotImplementedError(f"detector {spec.detector!r} is not implemented")
 
 
-@dataclass(slots=True)
-class RunState:
-    """Mutable state of a run in progress."""
+def check_spec(spec: RunSpec, detector_name: str) -> None:
+    """Refuse what would waste calls.
 
-    files: RunFiles
-    done: set[Key]
-    progress: Progress = field(default_factory=Progress)
+    k = all exists only for the Random Forest, which in turn cannot train on nothing at k = 0.
+    """
+    if None in spec.k_values and detector_name != "rf":
+        raise ValueError("k = all is only meaningful for the Random Forest")
+    if detector_name == "rf" and 0 in spec.k_values:
+        raise ValueError("the Random Forest starts at k = 1")
 
 
 def make_run_id(spec: RunSpec, now: datetime) -> str:
+    """`<UTC timestamp>-<dataset>-<detector>-<split>`: the directory under results/."""
     detector = spec.detector.replace(":", "-")
-    return f"{now:%Y%m%dT%H%M%SZ}-{detector}-{spec.split}"
+    return f"{now:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{detector}-{spec.split}"
 
 
-def build_detector(spec: RunSpec, prompt: Prompt) -> Detector:
-    if spec.detector == "jev":
-        return jev.JevDetector(prompt=prompt, fmt=spec.fmt)
-    if spec.detector == "rf":
-        vocabulary = random_forest.Vocabulary.from_flows(dataset.load_train())
-        return random_forest.RandomForestDetector(vocabulary)
-    if spec.detector in ("llm:deepseek", "llm:chatgpt"):
-        provider: llm.Provider = (
-            "deepseek" if spec.detector == "llm:deepseek" else "chatgpt"
-        )
-        model_id = spec.model or llm.DEFAULT_MODEL[provider]
-        price = load_prices().for_model(model_id)
-        return llm.LLMDetector(prompt, provider, price, model_id=model_id, fmt=spec.fmt)
-    msg = f"detector {spec.detector!r} is not implemented yet"
-    raise NotImplementedError(msg)
+def sample_examples(train: Sequence[Flow], k: int, seed: int, categories: Sequence[str]) -> list[Flow]:
+    """Draw k Examples per Category, at random within each Category (grilling Q5).
 
-
-def check_ks(spec: RunSpec, detector: Detector) -> None:
-    """k = all exists only for the Random Forest, which in turn cannot take k = 0."""
-    if None in spec.ks and detector.name != "rf":
-        msg = "k = all is only meaningful for the Random Forest"
-        raise ValueError(msg)
-    if detector.name == "rf" and 0 in spec.ks:
-        msg = "the Random Forest starts at k = 1"
-        raise ValueError(msg)
-
-
-def chunks(flows: Sequence[Flow], size: int) -> Iterator[Sequence[Flow]]:
-    step = max(size, 1)
-    for start in range(0, len(flows), step):
-        yield flows[start : start + step]
-
-
-def run_config(
-    spec: RunSpec, run_id: str, prompt: Prompt, detector: Detector
-) -> dict[str, Any]:
-    return {
-        "run_id": run_id,
-        "spec": asdict(spec),
-        "detector": detector.name,
-        "model": detector.model,
-        "prompt": {"version": prompt.version, "sha256": prompt.sha256},
-        "jev_question_templates": {
-            "is_attack": jev.IS_ATTACK_TEMPLATE,
-            "category": jev.CATEGORY_TEMPLATE,
-            "examples_clause": jev.EXAMPLES_CLAUSE,
-        },
-        "llm_instructions_template": llm.INSTRUCTIONS_TEMPLATE,
-        "chatgpt_preambles": {
-            "neutral": chatgpt.NEUTRAL_PREAMBLE,
-            "fallback": chatgpt.CODEX_PREAMBLE,
-            "note": "the preamble actually sent is stored with each raw response",
-        },
-        "category_table_version": dataset.CATEGORY_TABLE_VERSION,
-        "prices_date": load_prices().date,
-        "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
-    }
-
-
-@dataclass(slots=True)
-class Plan:
-    """A run after its inputs were resolved and its files opened."""
-
-    spec: RunSpec
-    detector: Detector
-    prompt: Prompt
-    run_id: str
-    state: RunState
-    flows: list[Flow]
-    train: Sequence[Flow]
+    Each Category is shuffled by a random stream seeded with `seed` and its name, and its first k Flows are taken; so for one seed the draws
+    are nested across k (the Examples of k = 4 are among those of k = 8) and independent of the other Categories. The final order is one
+    more seeded shuffle, shared by every Detector, so no Detector sees the Examples grouped by Category. A Category with no Flow in the pool
+    (held out as novel, §15) contributes nothing; one with fewer than k Flows raises.
+    """
+    chosen: list[Flow] = []
+    for category in categories:
+        pool = [flow for flow in train if flow.category == category]
+        if 0 < len(pool) < k:
+            raise ValueError(f"category {category!r}: {len(pool)} flows, k = {k} asked")
+        random.Random(f"{seed}:{category}").shuffle(pool)  # noqa: S311  # seeded, not secret
+        chosen.extend(pool[:k])
+    random.Random(f"{seed}:order").shuffle(chosen)  # noqa: S311  # seeded, not secret
+    return chosen
 
 
 def execute(
     spec: RunSpec,
     detector: Detector,
-    prompt: Prompt,
-    data: RunData | None = None,
-    results_dir: Path = RESULTS_DIR,
+    config: Config,
+    flows: Sequence[Flow],
+    train: Sequence[Flow],
 ) -> Path:
-    """Run `detector` over the split and return the run directory."""
-    if spec.split == "paper" and not spec.allow_paper:
-        msg = "the paper split needs --allow-paper"
-        raise PermissionError(msg)
-    check_ks(spec, detector)
-    plan = _prepare(spec, detector, prompt, data or RunData(), results_dir)
-    for k, seed in itertools.product(spec.ks, spec.seeds):
-        _run_k_seed(plan, k, seed)
-    print(f"done: {plan.state.files.run_dir} {plan.state.progress.line()}")
-    return plan.state.files.run_dir
+    """Run `detector` over `flows` with Examples drawn from `train`; the run directory.
 
-
-def _prepare(
-    spec: RunSpec, detector: Detector, prompt: Prompt, data: RunData, results_dir: Path
-) -> Plan:
-    run_id = spec.resume or make_run_id(spec, datetime.now(UTC))
-    files = RunFiles(results_dir / run_id)
-    state = RunState(files, files.existing_keys() if spec.resume else set())
-    files.write_config(run_config(spec, run_id, prompt, detector))
-    flows = (
-        list(data.flows) if data.flows is not None else dataset.load_split(spec.split)
+    `config.json` is written first, with what is needed to trace the run to its exact inputs: the resolved spec, the card's name and hash,
+    the prompt hash.
+    """
+    check_spec(spec, detector.name)
+    run_id = make_run_id(spec, datetime.now(UTC))
+    run_dir = spec.results_dir / run_id
+    write_config(
+        run_dir,
+        {
+            "run_id": run_id,
+            "spec": asdict(spec),
+            "detector": detector.name,
+            "model": detector.model,
+            "dataset": {"name": config["name"], "sha256": config["sha256"]},
+            "prompt_hash": detector.prompt_hash,
+            "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        },
     )
-    return Plan(
-        spec, detector, prompt, run_id, state, flows, _train_if_needed(spec, data.train)
-    )
+    # The fields every row of this run shares; a cell adds k, seed, rep and the number of Examples.
+    run_fields: dict[str, Any] = {
+        "run_id": run_id,
+        "dataset": config["name"],
+        "detector": detector.name,
+        "model": detector.model,
+        "split": spec.split,
+        "prompt_hash": detector.prompt_hash,
+    }
+    for k, seed in itertools.product(spec.k_values, spec.seeds):
+        # Drawn once per (k, seed) and reused by every rep, so the Random Forest keeps its fit across the repetitions. k = None is
+        # the whole pool.
+        examples = list(train) if k is None else sample_examples(train, k, seed, config["categories"])
+        for rep in range(spec.reps):
+            cell = {**run_fields, "k": k, "seed": seed, "rep": rep}
+            cell["n_examples"] = len(examples)
+            run_cell(detector, flows, examples, cell, run_dir)
+    print(f"done: {run_dir}")
+    return run_dir
 
 
-def _run_k_seed(plan: Plan, k: int | None, seed: int) -> None:
-    """Every rep of one (k, seed): the Examples are drawn once and reused."""
-    examples = examples_for(plan.train, k, seed)
-    for rep in range(plan.spec.reps):
-        context = _context(
-            plan.spec,
-            plan.run_id,
-            plan.detector,
-            Cell(k, seed, rep, len(examples)),
-            plan.prompt,
-        )
-        pending = [
-            f for f in plan.flows if (f.row_id, k, seed, rep) not in plan.state.done
-        ]
-        _run_cell(plan.detector, pending, examples, context, plan.state)
-
-
-def _train_if_needed(spec: RunSpec, train: Sequence[Flow] | None) -> Sequence[Flow]:
-    if train is not None:
-        return train
-    return dataset.load_train() if any(k != 0 for k in spec.ks) else []
-
-
-def examples_for(train: Sequence[Flow], k: int | None, seed: int) -> list[Example]:
-    """k Examples per Category; None means every Train+ Flow, labeled."""
-    if k is None:
-        return [Example(flow, flow.category) for flow in train]
-    return dataset.sample_examples(train, k, seed) if k else []
-
-
-def _context(
-    spec: RunSpec, run_id: str, detector: Detector, cell: Cell, prompt: Prompt
-) -> RunContext:
-    return RunContext(
-        run_id=run_id,
-        detector=detector.name,
-        split=spec.split,
-        k=cell.k,
-        n_examples=cell.n_examples,
-        seed=cell.seed,
-        rep=cell.rep,
-        batch=spec.batch,
-        format=spec.fmt,
-        prompt_version=prompt.version,
-        prompt_hash=prompt.sha256,
-    )
-
-
-def _run_cell(
+def run_cell(
     detector: Detector,
-    pending: Sequence[Flow],
-    examples: Sequence[Example],
-    context: RunContext,
-    state: RunState,
+    flows: Sequence[Flow],
+    examples: Sequence[Flow],
+    cell_fields: dict[str, Any],
+    run_dir: Path,
 ) -> None:
-    """One (k, seed, rep) cell: every pending Flow, `batch` at a time."""
-    for chunk in chunks(pending, context.batch):
-        outcomes = detector.predict(chunk, examples)
-        ts_utc = datetime.now(UTC).isoformat(timespec="milliseconds")
-        for outcome in outcomes:
-            state.files.append(to_prediction(outcome, context, ts_utc), outcome.raw)
-        state.progress.add(outcomes)
-        if state.progress.calls % PROGRESS_EVERY == 0:
-            print(
-                f"k={context.k} seed={context.seed} rep={context.rep} "
-                f"{state.progress.line()}"
-            )
+    """One (k, seed, rep) cell: every Flow of the split, one call and one row each.
+
+    The cell ends with one progress line: Flows judged and error rows (§14).
+    """
+    errors = 0
+    for flow in flows:
+        measured = detector.predict(flow, examples)
+        prediction = complete_prediction(measured, flow, cell_fields)
+        append_prediction(run_dir, prediction)
+        errors += int(prediction.get("error") is not None)
+    print(f"k={cell_fields['k']} seed={cell_fields['seed']} rep={cell_fields['rep']} flows={len(flows)} errors={errors}")
 
 
 def run_from_spec(spec: RunSpec) -> Path:
-    prompt = load_prompt(spec.prompt_version)
-    return execute(spec, build_detector(spec, prompt), prompt)
+    """The CLI entry: load the card, the split and the pool, build the detector, run."""
+    config = dataset.load_config(spec.dataset)
+    flows = dataset.load_split(config["dir"] / "splits" / f"{spec.split}.csv", config)
+    train = dataset.load_split(config["dir"] / "pool.csv", config)
+    return execute(spec, build_detector(spec, config), config, flows, train)

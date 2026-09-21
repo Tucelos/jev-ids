@@ -1,76 +1,60 @@
-"""Random Forest detector: vocabulary, vectors, fitting once and outcomes."""
-
-from __future__ import annotations
+"""Random Forest detector: vocabulary by index, vectors, fitting once, predictions."""
 
 import pytest
 
-from somids import dataset
+from somids.dataset import Flow
 from somids.detectors import random_forest as rf
+from somids.run import sample_examples
+from tests.helpers import CONFIG
 
-BASE = ["0"] * len(dataset.COLUMNS)
+CATEGORIES: list[str] = CONFIG["categories"]
 
 
-def flow(
-    row_id: int, name: str, symbolic: tuple[str, str, str], bytes_: str
-) -> dataset.Flow:
-    values = list(BASE)
-    values[1:4] = list(symbolic)
-    values[4] = bytes_
-    return dataset.Flow(
-        row_id=row_id, text=",".join(values), attack_name=name, difficulty=1
-    )
+def flow(row_id: int, category: str, symbolic: str, bytes_: str) -> Flow:
+    """A Flow of CONFIG: `a` is bytes_, `b` (symbolic) is symbolic, `c` is 0."""
+    return Flow(row_id, f"{bytes_},{symbolic},0", category, category != "normal")
 
 
 TRAIN = [
-    flow(0, "normal", ("tcp", "http", "SF"), "300"),
-    flow(1, "normal", ("tcp", "http", "SF"), "250"),
-    flow(2, "neptune", ("tcp", "private", "S0"), "0"),
-    flow(3, "neptune", ("tcp", "private", "REJ"), "0"),
-    flow(4, "satan", ("icmp", "eco_i", "SF"), "8"),
-    flow(5, "satan", ("udp", "other", "SF"), "1"),
-    flow(6, "guess_passwd", ("tcp", "telnet", "SF"), "120"),
-    flow(7, "guess_passwd", ("tcp", "telnet", "RSTO"), "130"),
-    flow(8, "perl", ("tcp", "telnet", "SF"), "1500"),
-    flow(9, "perl", ("tcp", "telnet", "SF"), "1600"),
+    flow(0, "normal", "tcp", "300"),
+    flow(1, "normal", "tcp", "250"),
+    flow(2, "dos", "tcp", "0"),
+    flow(3, "dos", "udp", "0"),
+    flow(4, "probe", "icmp", "8"),
+    flow(5, "probe", "udp", "1"),
 ]
+VOCABULARY = rf.vocabulary(TRAIN, CONFIG)
 
 
 def test_vocabulary_and_vector_shape() -> None:
-    vocabulary = rf.Vocabulary.from_flows(TRAIN)
-    assert vocabulary.values["protocol_type"] == ("icmp", "tcp", "udp")
-    assert vocabulary.width == 38 + 3 + 5 + 4
-    vector = vocabulary.vector(TRAIN[4])
-    assert len(vector) == vocabulary.width
-    assert vector[:2] == [0.0, 8.0]
-    assert vector[38:41] == [1.0, 0.0, 0.0]
-    unseen = vocabulary.vector(flow(99, "normal", ("sctp", "http", "SF"), "1"))
-    assert unseen[38:41] == [0.0, 0.0, 0.0]
+    assert VOCABULARY == {1: ("icmp", "tcp", "udp")}
+    # The two numeric features in order, then one column per known value of `b`.
+    assert rf.feature_vector(TRAIN[4], VOCABULARY) == [8.0, 0.0, 1.0, 0.0, 0.0]
+    unseen = rf.feature_vector(flow(99, "normal", "sctp", "1"), VOCABULARY)
+    assert unseen == [1.0, 0.0, 0.0, 0.0, 0.0]
 
 
 def test_predict_fits_once_per_examples_object_and_derives_p_attack() -> None:
-    detector = rf.RandomForestDetector(rf.Vocabulary.from_flows(TRAIN), n_estimators=10)
-    examples = dataset.sample_examples(TRAIN, 2, seed=0)
+    detector = rf.RandomForestDetector(VOCABULARY, "normal", n_estimators=10)
+    examples = sample_examples(TRAIN, 2, 0, CATEGORIES)
 
-    first = detector.predict([TRAIN[0], TRAIN[2]], examples)
-    second = detector.predict([TRAIN[8]], examples)
+    normal = detector.predict(TRAIN[0], examples)
+    attack = detector.predict(TRAIN[2], examples)
+    second = detector.predict(TRAIN[4], examples)
 
     assert detector.fits == 1
-    assert detector.model == "sklearn-random-forest-10"
-    normal, attack = first
-    assert normal.probabilities is not None
-    assert sum(normal.probabilities.values()) == pytest.approx(1.0)
-    assert normal.p_attack == pytest.approx(1.0 - normal.probabilities["normal"])
-    assert attack.p_attack is not None and attack.p_attack > 0.5
-    assert attack.category_pred == "dos"
-    assert normal.train_time_ms == second[0].train_time_ms
-    assert normal.latency_e2e_ms is not None
-    assert normal.cost_usd is None
-    assert normal.request_id == attack.request_id != second[0].request_id
-    detector.predict([TRAIN[0]], dataset.sample_examples(TRAIN, 1, seed=1))
+    assert (detector.name, detector.model) == ("rf", "sklearn-random-forest-10")
+    assert detector.prompt_hash is None
+    assert set(normal) == {"p_attack", "category_pred", "latency_ms", "train_time_ms"}
+    assert 0.0 <= normal["p_attack"] < 0.5 < attack["p_attack"] <= 1.0
+    assert attack["category_pred"] == "dos"
+    assert normal["train_time_ms"] == second["train_time_ms"] > 0
+    assert normal["latency_ms"] > 0
+    detector.predict(TRAIN[0], sample_examples(TRAIN, 1, 1, CATEGORIES))
     assert detector.fits == 2
 
 
 def test_fit_rejects_zero_shot() -> None:
-    detector = rf.RandomForestDetector(rf.Vocabulary.from_flows(TRAIN))
+    detector = rf.RandomForestDetector(VOCABULARY, "normal")
     with pytest.raises(ValueError, match="k >= 1"):
-        detector.predict([TRAIN[0]], [])
+        detector.predict(TRAIN[0], [])

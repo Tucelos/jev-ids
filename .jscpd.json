@@ -12,6 +12,7 @@
     "**/coverage/**",
     "**/*.lock",
     "**/package-lock.json",
-    "**/*.log"
+    "**/*.log",
+    "**/results/**"
   ]
 }

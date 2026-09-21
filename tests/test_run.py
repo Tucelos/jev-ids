@@ -1,202 +1,201 @@
-"""The run loop with a fake detector: order, resume, guard and files."""
+"""The run loop: files, order, guards, the committed prompt files and the Examples."""
 
-from __future__ import annotations
-
+import hashlib
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from somids import dataset, run
-from somids.detectors.base import Outcome
-from somids.prompt import load_prompt
+from somids import ROOT, dataset, records, run
+from somids.detectors import jev
+from somids.detectors.random_forest import RandomForestDetector
+from tests.helpers import CONFIG, JEV_PROMPT, make_flow, make_train, write_dataset
 
-TRAIN = [
-    dataset.Flow(row_id=i, text=",".join([str(i)] * 41), attack_name=name, difficulty=1)
-    for i, name in enumerate(
-        [
-            "normal",
-            "normal",
-            "neptune",
-            "neptune",
-            "satan",
-            "satan",
-            "phf",
-            "phf",
-            "perl",
-            "perl",
-        ]
-    )
-]
+CATEGORIES: list[str] = CONFIG["categories"]
+TRAIN = make_train(["normal", "normal", "dos", "dos", "probe", "probe"])
 FLOWS = [
-    dataset.Flow(
-        row_id=100 + i, text=",".join(["7"] * 41), attack_name=name, difficulty=1
-    )
-    for i, name in enumerate(["normal", "apache2", "neptune"])
+    make_flow(100, "normal", value="7"),
+    make_flow(101, "dos", value="7", novel_attack=True),
+    make_flow(102, "probe", value="7"),
 ]
+NSL_KDD = ROOT / "data" / "nsl-kdd" / "dataset.json"
 
 
-class FakeDetector:
-    """Counts calls and records the Examples it saw."""
+class FakeDetector(jev.JevDetector):
+    """Answers `p_attack = is_attack` without any request, and counts its calls."""
 
     def __init__(self) -> None:
+        super().__init__(JEV_PROMPT)
+        self.name = "fake"
+        self.model = "fake-1"
         self.calls: list[tuple[int, int]] = []
 
-    @property
-    def name(self) -> str:
-        return "fake"
-
-    @property
-    def model(self) -> str:
-        return "fake-1"
-
-    def predict(
-        self, flows: Sequence[dataset.Flow], examples: Sequence[dataset.Example]
-    ) -> list[Outcome]:
-        self.calls.append((len(flows), len(examples)))
-        return [
-            Outcome(
-                flow=flow,
-                model=self.model,
-                p_attack=float(flow.is_attack),
-                category_pred=flow.category,
-                confidence=None,
-                probabilities=None,
-                input_tokens=10,
-                output_tokens=1,
-                cache_tokens=None,
-                reasoning_tokens=None,
-                cost_usd=0.5,
-                billed_cost_usd=0.0,
-                latency_e2e_ms=1.0,
-                latency_provider_ms=None,
-                time_to_first_token_ms=None,
-                train_time_ms=None,
-                retries=0,
-                error=None,
-                request_id=f"req-{flow.row_id}",
-            )
-            for flow in flows
-        ]
+    def predict(self, flow: dataset.Flow, examples: Sequence[dataset.Flow]) -> dict[str, Any]:
+        self.calls.append((flow.row_id, len(examples)))
+        return {
+            "p_attack": float(flow.is_attack),
+            "category_pred": flow.category,
+            "latency_ms": 1.0,
+            "usage": {"input_tokens": 10, "output_tokens": 1},
+            "raw": {"echo": flow.row_id},
+        }
 
 
-def test_execute_covers_every_cell_and_writes_the_three_files(tmp_path: Path) -> None:
-    spec = run.RunSpec(
-        detector="fake", split="smoke", ks=(0, 1), seeds=(0,), reps=2, batch=2
-    )
-    detector = FakeDetector()
-
-    run_dir = run.execute(
-        spec, detector, load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
-    )
-
-    predictions = list(run.RunFiles(run_dir).read_predictions())
-    assert len(predictions) == 2 * 1 * 2 * 3
-    assert detector.calls == [
-        (2, 0),
-        (1, 0),
-        (2, 0),
-        (1, 0),
-        (2, 5),
-        (1, 5),
-        (2, 5),
-        (1, 5),
-    ]
-    assert {p.n_examples for p in predictions} == {0, 5}
-    assert (run_dir / "config.json").exists()
-    assert (run_dir / "responses.jsonl").exists()
-    assert run_dir.name.endswith("-fake-smoke")
+@pytest.fixture
+def card(tmp_path: Path) -> Path:
+    """A dataset on disk: TRAIN is the pool and FLOWS the `smoke` split."""
+    return write_dataset(tmp_path / "data", CONFIG, {"pool": TRAIN, "smoke": FLOWS})
 
 
-def test_resume_skips_what_is_already_written(tmp_path: Path) -> None:
-    first = run.RunSpec(detector="fake", split="smoke", ks=(0,), seeds=(0,), reps=1)
-    run_dir = run.execute(
-        first, FakeDetector(), load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
-    )
-    resumed = run.RunSpec(
-        detector="fake",
+def smoke_spec(
+    card: Path,
+    detector: str = "fake",
+    k_values: tuple[int | None, ...] = (0,),
+    reps: int = 1,
+) -> run.RunSpec:
+    """A smoke-split spec writing next to the dataset."""
+    return run.RunSpec(
+        detector=detector,
+        dataset=card,
         split="smoke",
-        ks=(0, 1),
+        k_values=k_values,
         seeds=(0,),
-        reps=1,
-        resume=run_dir.name,
+        reps=reps,
+        results_dir=card.parent.parent.parent / "results",
     )
+
+
+def test_execute_covers_every_cell_in_order_and_writes_the_three_files(card: Path, capsys: pytest.CaptureFixture[str]) -> None:
     detector = FakeDetector()
+    config = dataset.load_config(card)
+    spec = smoke_spec(card, k_values=(0, 1), reps=2)
 
-    run.execute(
-        resumed, detector, load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
-    )
+    run_dir = run.execute(spec, detector, config, FLOWS, TRAIN)
 
-    assert detector.calls == [(1, 5), (1, 5), (1, 5)]
-    assert len(list(run.RunFiles(run_dir).read_predictions())) == 6
+    predictions = records.read_predictions(run_dir)
+    assert len(predictions) == 2 * 1 * 2 * 3
+    # k outermost, then rep, then the Flows; 3 Examples at k = 1.
+    zero_shot = [(100, 0), (101, 0), (102, 0)]
+    one_shot = [(100, 3), (101, 3), (102, 3)]
+    assert detector.calls == zero_shot * 2 + one_shot * 2
+    assert {p["n_examples"] for p in predictions} == {0, 3}
+    shared = {
+        *("run_id", "dataset", "detector", "model", "split", "prompt_hash"),
+        *("k", "seed", "rep", "n_examples", "row_id", "y_true", "y_pred"),
+        *("category_true", "novel_attack", "p_attack", "category_pred"),
+        *("latency_ms", "usage", "request_id", "ts_utc"),
+    }
+    assert all(set(p) == shared for p in predictions)
+    assert {(p["dataset"], p["detector"], p["prompt_hash"]) for p in predictions} == {("test", "fake", "h")}
+    assert run_dir.name.endswith("-test-fake-smoke")
+    responses = (run_dir / "responses.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(responses) == len(predictions)
+    assert json.loads(responses[0])["request_id"] == predictions[0]["request_id"]
+    config_json = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    assert config_json["spec"]["k_values"] == [0, 1]
+    assert config_json["spec"]["dataset"] == str(card)
+    assert config_json["dataset"] == {"name": "test", "sha256": config["sha256"]}
+    assert (config_json["model"], config_json["prompt_hash"]) == ("fake-1", "h")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "k=0 seed=0 rep=0 flows=3 errors=0"
+    assert len(lines) == 4 + 1  # one line per cell, then `done:`
 
 
-def test_paper_split_requires_the_flag(tmp_path: Path) -> None:
-    spec = run.RunSpec(detector="fake", split="paper", ks=(0,), seeds=(0,))
-    with pytest.raises(PermissionError, match="--allow-paper"):
-        run.execute(
-            spec, FakeDetector(), load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
-        )
+def test_predictions_carry_the_truth_and_the_verdict(card: Path) -> None:
+    config = dataset.load_config(card)
+    run_dir = run.execute(smoke_spec(card), FakeDetector(), config, FLOWS, TRAIN)
+    by_row = {p["row_id"]: p for p in records.read_predictions(run_dir)}
+    assert (by_row[100]["y_true"], by_row[100]["y_pred"]) == (0, 0)
+    assert (by_row[101]["y_true"], by_row[101]["y_pred"]) == (1, 1)
+    assert (by_row[101]["category_true"], by_row[101]["novel_attack"]) == ("dos", True)
 
 
-def test_progress_line_counts_errors_and_cost() -> None:
-    progress = run.Progress()
-    outcome = FakeDetector().predict(FLOWS[:1], [])[0]
-    progress.add([outcome])
-    assert progress.line() == "calls=1 predictions=1 errors=0 list_cost_usd=0.5000"
+def test_run_from_spec_reads_the_dataset_and_fits_the_forest_on_the_pool(
+    card: Path,
+) -> None:
+    # End to end from disk with the one Detector that needs no network.
+    run_dir = run.run_from_spec(smoke_spec(card, "rf", k_values=(1, None), reps=2))
+    predictions = records.read_predictions(run_dir)
+    assert len(predictions) == 2 * 2 * 3
+    assert {p["n_examples"] for p in predictions} == {3, len(TRAIN)}
+    assert {p["prompt_hash"] for p in predictions} == {None}
+    assert all(p["y_pred"] in (0, 1) for p in predictions)
+    assert all(p["train_time_ms"] > 0 for p in predictions)
+    assert not (run_dir / "responses.jsonl").exists()  # the forest has no raw answer
 
 
-def test_build_detector_knows_jev_and_rejects_unknown_names() -> None:
-    prompt = load_prompt("v1")
-    assert (
-        run.build_detector(run.RunSpec("jev", "smoke", (0,), (0,)), prompt).name
-        == "jev"
-    )
+def test_build_detector_knows_the_four_names(card: Path) -> None:
+    config = dataset.load_config(card)
+    forest = run.build_detector(run.RunSpec("rf", card, "smoke", (1,), (0,)), config)
+    assert isinstance(forest, RandomForestDetector)
+    # Feature `b` sits at index 1; every TRAIN attribute equals its row index.
+    assert forest.vocabulary == {1: ("0", "1", "2", "3", "4", "5")}
+    assert forest.benign == "normal"
+    nsl_kdd = dataset.load_config(NSL_KDD)
+    jev_spec = run.RunSpec("jev", NSL_KDD, "smoke", (0,), (0,))
+    judge = run.build_detector(jev_spec, nsl_kdd)
+    assert judge.name == "jev"
+    assert len(judge.prompt_hash or "") == 64
+    deepseek_spec = run.RunSpec("llm:deepseek", NSL_KDD, "smoke", (0,), (0,))
+    deepseek = run.build_detector(deepseek_spec, nsl_kdd)
+    assert (deepseek.name, deepseek.model) == ("llm:deepseek", "deepseek-flash")
+    terra_spec = run.RunSpec("llm:chatgpt", NSL_KDD, "smoke", (0,), (0,), model_id="gpt-5.6-terra")
+    assert run.build_detector(terra_spec, nsl_kdd).model == "gpt-5.6-terra"
     with pytest.raises(NotImplementedError):
-        run.build_detector(run.RunSpec("unknown", "smoke", (0,), (0,)), prompt)
+        run.build_detector(run.RunSpec("unknown", card, "smoke", (0,), (0,)), config)
 
 
-def test_chunks_and_run_id() -> None:
-    assert [len(c) for c in run.chunks(FLOWS, 2)] == [2, 1]
-    assert [len(c) for c in run.chunks(FLOWS, 0)] == [1, 1, 1]
-    spec = run.RunSpec("llm:deepseek", "internal", (0,), (0,))
-    assert (
-        run.make_run_id(spec, datetime(2026, 9, 20, 18, 0, 0, tzinfo=UTC))
-        == "20260920T180000Z-llm-deepseek-internal"
-    )
+def test_run_id_has_timestamp_dataset_detector_and_split() -> None:
+    spec = run.RunSpec("llm:deepseek", NSL_KDD, "internal", (0,), (0,))
+    assert run.make_run_id(spec, datetime(2026, 9, 20, 18, 0, 0, tzinfo=UTC)) == "20260920T180000Z-nsl-kdd-llm-deepseek-internal"
 
 
-def test_k_all_uses_every_train_flow_and_is_rf_only(tmp_path: Path) -> None:
-    examples = run.examples_for(TRAIN, None, seed=0)
-    assert len(examples) == len(TRAIN)
-    assert run.examples_for(TRAIN, 0, seed=0) == []
-    spec = run.RunSpec(detector="fake", split="smoke", ks=(None,), seeds=(0,))
+def test_k_all_is_rf_only_and_rf_cannot_start_at_zero_shot() -> None:
     with pytest.raises(ValueError, match="only meaningful for the Random Forest"):
-        run.execute(
-            spec, FakeDetector(), load_prompt("v1"), run.RunData(FLOWS, TRAIN), tmp_path
-        )
-
-
-def test_rf_cannot_start_at_zero_shot() -> None:
-    class RfLike(FakeDetector):
-        @property
-        def name(self) -> str:
-            return "rf"
-
-    spec = run.RunSpec(detector="rf", split="smoke", ks=(0, 1), seeds=(0,))
+        run.check_spec(run.RunSpec("jev", NSL_KDD, "smoke", (None,), (0,)), "jev")
     with pytest.raises(ValueError, match="starts at k = 1"):
-        run.check_ks(spec, RfLike())
+        run.check_spec(run.RunSpec("rf", NSL_KDD, "smoke", (0, 1), (0,)), "rf")
 
 
-def test_build_detector_knows_the_llm_providers() -> None:
-    prompt = load_prompt("v1")
-    deepseek = run.build_detector(
-        run.RunSpec("llm:deepseek", "smoke", (0,), (0,)), prompt
-    )
-    assert deepseek.name == "llm:deepseek"
-    assert deepseek.model == "deepseek-flash"
-    luna = run.build_detector(
-        run.RunSpec("llm:chatgpt", "smoke", (0,), (0,), model="gpt-5.6-terra"), prompt
-    )
-    assert luna.model == "gpt-5.6-terra"
+def test_sample_examples_is_balanced_nested_and_deterministic() -> None:
+    k1 = run.sample_examples(TRAIN, 1, 0, CATEGORIES)
+    k2 = run.sample_examples(TRAIN, 2, 0, CATEGORIES)
+    assert len(k1) == 3
+    assert len(k2) == 6
+    for category in CATEGORIES:
+        assert sum(example.category == category for example in k2) == 2
+    assert {example.row_id for example in k1} <= {example.row_id for example in k2}
+    assert run.sample_examples(TRAIN, 2, 0, CATEGORIES) == k2
+    assert run.sample_examples(TRAIN, 0, 0, CATEGORIES) == []
+    with pytest.raises(ValueError, match="k = 3 asked"):
+        run.sample_examples(TRAIN, 3, 0, CATEGORIES)
+    # A Category held out of the pool contributes no Examples (grilling §15).
+    assert run.sample_examples(TRAIN, 1, 0, [*CATEGORIES, "r2l"]) == k1
+
+
+def test_load_prompt_hashes_the_bytes(tmp_path: Path) -> None:
+    path = tmp_path / "p.md"
+    path.write_bytes(b"abc")
+    sha256 = hashlib.sha256(b"abc").hexdigest()
+    assert run.load_prompt(path) == {"text": "abc", "sha256": sha256}
+
+
+@pytest.mark.parametrize("name", ["nsl-kdd", "nf-uq-nids-v2"])
+def test_each_committed_prompt_pair_matches_its_card(name: str) -> None:
+    config = dataset.load_config(ROOT / "data" / name / "dataset.json")
+    body = json.loads(run.load_prompt(ROOT / "prompts" / name / "jev.json")["text"])
+    assert body["model"] == "typesafe-ai/jev"
+    assert list(body["state"]["categories"]) == config["categories"]
+    assert body["state"]["columns"] == ",".join(config["features"])
+    assert set(body["questions"]) == {"is_attack_r0", "category_r0"}
+    assert all("`records.r0`" in q["instructions"] for q in body["questions"].values())
+    text = run.load_prompt(ROOT / "prompts" / name / "llm.md")["text"]
+    # The same task text, Categories and columns reach every Detector; the Markdown layout around them belongs to the prompt's author.
+    assert body["state"]["instructions"] in text
+    assert all(f"- `{category}`:" in text for category in config["categories"])
+    assert f"\n{body['state']['columns']}\n" in text
+    assert text.count("{examples}") == 1
+    assert "JSON" in text

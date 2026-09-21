@@ -4,10 +4,10 @@
   "models": {
     "typesafe-ai/jev": {
       "input": 0.042,
-      "cached_input": null,
+      "cached_input": 0.042,
       "output": 0.0,
       "source": "https://vercel.com/ai-gateway/models/jev",
-      "note": "List price; billed 0 under the promotion that ends on 2026-09-25."
+      "note": "List price, no cache discount; billed 0 under the promotion that ends on 2026-09-25."
     },
     "deepseek-flash": {
       "input": 0.3,
