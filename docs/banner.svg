@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="480" viewBox="0 0 1400 480" role="img" aria-label="Jev IDS. One flow, one request, one verdict. Intrusion detection with TypeSafe's Jev on NSL-KDD.">
+  <defs>
+    <style>
+      text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .header { font-size: 17px; letter-spacing: 3px; fill: #9aa5b1; }
+      .title { font-size: 112px; font-weight: 700; letter-spacing: -7px; fill: #f2f5f7; }
+      .tagline { font-size: 24px; letter-spacing: 1px; fill: #eb6834; }
+      .card-label { font-size: 13px; letter-spacing: 2px; fill: #79828d; }
+      .card-text { font-size: 15px; fill: #c9d1d9; }
+      .card-key { font-size: 15px; fill: #79828d; }
+      .card-value { font-size: 15px; font-weight: 700; fill: #f2f5f7; }
+      .verdict { font-size: 26px; font-weight: 700; fill: #eb6834; }
+    </style>
+  </defs>
+  <rect width="1400" height="480" rx="20" fill="#10141a"/>
+  <!-- Header, title and tagline -->
+  <text x="72" y="76" class="header">INTRUSION DETECTION · BUILT ON TYPESAFE'S JEV</text>
+  <text x="66" y="248" class="title">JEV IDS</text>
+  <text x="72" y="300" class="header">A SYSTEM ONE MODEL WATCHING NETWORK FLOWS</text>
+  <text x="72" y="400" class="tagline">ONE FLOW. ONE REQUEST. ONE VERDICT.</text>
+  <!-- Blue packet trail from the title to the request card -->
+  <g fill="#2a78d6">
+    <circle cx="552" cy="342" r="4"/><circle cx="584" cy="342" r="4"/><circle cx="616" cy="342" r="4"/>
+    <circle cx="648" cy="342" r="4"/><circle cx="680" cy="342" r="4"/><circle cx="712" cy="342" r="4" opacity=".6"/>
+    <circle cx="744" cy="342" r="4" opacity=".3"/>
+  </g>
+  <!-- One real request of the pilot run (NSL-KDD row 3987, a neptune flow), drawn as a tilted terminal card -->
+  <g transform="translate(820 74) rotate(-3)">
+    <rect width="520" height="316" rx="14" fill="#1a1f26" stroke="#33393f" stroke-width="2"/>
+    <circle cx="26" cy="24" r="6" fill="#eb6834"/><circle cx="46" cy="24" r="6" fill="#e4b83a"/><circle cx="66" cy="24" r="6" fill="#0f9b5a"/>
+    <text x="96" y="29" class="card-label">POST /systemone · typesafe-ai/jev</text>
+    <line x1="0" y1="46" x2="520" y2="46" stroke="#33393f" stroke-width="2"/>
+    <text x="26" y="80" class="card-label">FLOWS.UNDER_TEST</text>
+    <text x="26" y="106" class="card-text">0,tcp,private,S0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,</text>
+    <text x="26" y="128" class="card-text">152,20,1.00,1.00,0.00,0.00,0.13,0.07,0.00,255,20,0.08,…</text>
+    <text x="26" y="168" class="card-label">ANSWERS</text>
+    <rect x="18" y="182" width="484" height="40" rx="8" fill="#26160f" stroke="#eb6834" stroke-width="2"/>
+    <text x="34" y="208" class="card-key">is_attack   noul</text>
+    <text x="250" y="208" class="card-value">0.82</text>
+    <text x="34" y="252" class="card-key">category    choice</text>
+    <text x="250" y="252" class="card-value">dos</text>
+    <text x="330" y="252" class="card-key">confidence</text>
+    <text x="470" y="252" class="card-value">0.84</text>
+    <line x1="0" y1="270" x2="520" y2="270" stroke="#33393f" stroke-width="2"/>
+    <text x="26" y="302" class="verdict">→ attack</text>
+    <text x="262" y="302" class="card-label" fill="#0f9b5a">1 REQUEST · MEDIAN 0.47 S</text>
+  </g>
+</svg>

@@ -2,9 +2,9 @@
 
 import pytest
 
-from somids.dataset import Flow
-from somids.detectors import random_forest as rf
-from somids.run import sample_examples
+from jev_ids.dataset import Flow
+from jev_ids.detectors import random_forest as rf
+from jev_ids.run import sample_examples
 from tests.helpers import CONFIG
 
 CATEGORIES: list[str] = CONFIG["categories"]

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from somids import metrics
-from somids.records import Prediction
+from jev_ids import metrics
+from jev_ids.records import Prediction
 from tests.helpers import make_prediction
 
 # The `models` entries of prices.json used below.

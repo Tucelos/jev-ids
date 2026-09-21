@@ -20,7 +20,7 @@ from sklearn.ensemble import (  # pyright: ignore[reportMissingTypeStubs]
     RandomForestClassifier,
 )
 
-from somids.dataset import Config, Flow
+from jev_ids.dataset import Config, Flow
 
 N_ESTIMATORS = 100
 RANDOM_STATE = 0

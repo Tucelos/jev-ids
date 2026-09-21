@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from somids import cli, records, run
+from jev_ids import cli, records, run
 from tests.helpers import make_prediction
 
 

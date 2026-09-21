@@ -12,7 +12,7 @@ from agno.models.message import Message
 from agno.models.openai.responses import OpenAIResponses
 from agno.models.response import ModelResponse
 
-from somids.detectors import chatgpt
+from jev_ids.detectors import chatgpt
 from tests.helpers import FakeResponse
 
 

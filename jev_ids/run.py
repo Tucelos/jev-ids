@@ -23,13 +23,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from somids import ROOT, dataset
-from somids.dataset import Config, Flow
-from somids.detectors import random_forest
-from somids.detectors.jev import JevDetector
-from somids.detectors.llm import LLMDetector
-from somids.detectors.random_forest import RandomForestDetector
-from somids.records import append_prediction, complete_prediction, write_config
+from jev_ids import ROOT, dataset
+from jev_ids.dataset import Config, Flow
+from jev_ids.detectors import random_forest
+from jev_ids.detectors.jev import JevDetector
+from jev_ids.detectors.llm import LLMDetector
+from jev_ids.detectors.random_forest import RandomForestDetector
+from jev_ids.records import append_prediction, complete_prediction, write_config
 
 RESULTS_DIR = ROOT / "results"
 

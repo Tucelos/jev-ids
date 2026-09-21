@@ -21,7 +21,7 @@ from typing import Any
 
 import requests
 
-from somids.dataset import Flow
+from jev_ids.dataset import Flow
 
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 API_KEY_VAR = "AI_GATEWAY_API_KEY"

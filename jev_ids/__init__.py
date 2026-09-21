@@ -1,4 +1,4 @@
-"""SOMIDS: intrusion detection with Jev, a System One Model, against two baselines.
+"""Jev IDS: intrusion detection with Jev, a System One Model, against two baselines.
 
 The package, in reading order:
 

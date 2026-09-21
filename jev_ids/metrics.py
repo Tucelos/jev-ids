@@ -13,8 +13,8 @@ from collections.abc import Iterable, Sequence
 from math import comb
 from typing import Any
 
-from somids import ROOT
-from somids.records import Prediction
+from jev_ids import ROOT
+from jev_ids.records import Prediction
 
 PRICES_PATH = ROOT / "prices.json"
 PredictionPair = tuple[Prediction, Prediction]

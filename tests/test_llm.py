@@ -7,8 +7,8 @@ from agno.metrics import RunMetrics
 from agno.models.deepseek import DeepSeek
 from agno.run.agent import RunOutput
 
-from somids.detectors import chatgpt, llm
-from somids.run import sample_examples
+from jev_ids.detectors import chatgpt, llm
+from jev_ids.run import sample_examples
 from tests.helpers import CONFIG, LLM_PROMPT, make_flow, make_train
 
 CATEGORIES: list[str] = CONFIG["categories"]

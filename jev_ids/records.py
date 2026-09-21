@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from somids.dataset import Flow
+from jev_ids.dataset import Flow
 
 # Every Detector takes its Verdict at the same point (CONTEXT.md, "Verdict"), so the threshold lives next to the field it fills and not
 # inside the detectors.

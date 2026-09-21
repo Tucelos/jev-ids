@@ -1,4 +1,4 @@
-# SOMIDS
+# Jev IDS
 
 Intrusion detection on network flow records with a System One Model (Jev),
 compared with an LLM baseline and a Random Forest on data efficiency, cost and

@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from somids.dataset import Config, Flow, split_header, write_split
-from somids.records import Prediction
+from jev_ids.dataset import Config, Flow, split_header, write_split
+from jev_ids.records import Prediction
 
 # A three-feature card with one symbolic feature and three Categories.
 CONFIG: Config = {

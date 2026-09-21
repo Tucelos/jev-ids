@@ -1,4 +1,4 @@
-"""The command line: `python -m somids run|metrics|compare`.
+"""The command line: `jev-ids run|metrics|compare`, also reachable as `python -m jev_ids`.
 
 In reading order:
 
@@ -19,8 +19,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from somids import metrics, run
-from somids.records import read_predictions
+from dotenv import load_dotenv
+
+from jev_ids import ROOT, metrics, run
+from jev_ids.records import read_predictions
 
 
 def parse_k(text: str) -> int | None:
@@ -39,7 +41,7 @@ def parse_list(text: str) -> tuple[int | None, ...]:
 
 def build_parser() -> argparse.ArgumentParser:
     """The three subcommands; each one carries the function that handles it."""
-    parser = argparse.ArgumentParser(prog="somids")
+    parser = argparse.ArgumentParser(prog="jev-ids")
     commands = parser.add_subparsers(dest="command", required=True)
 
     runner = commands.add_parser("run", help="run one detector over one split")
@@ -121,7 +123,9 @@ def print_csv(rows: Sequence[dict[str, Any]]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Parse the command line and call the subcommand's handler."""
+    """Load the secrets of `.env`, parse the command line and call the subcommand's handler."""
+    # The API keys live in `.env` and never in git (README); the console script and `python -m jev_ids` both pass through here.
+    load_dotenv(ROOT / ".env")
     args = build_parser().parse_args(argv)
     args.handler(args)
     return 0

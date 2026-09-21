@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from somids import ROOT, dataset, records, run
-from somids.detectors import jev
-from somids.detectors.random_forest import RandomForestDetector
+from jev_ids import ROOT, dataset, records, run
+from jev_ids.detectors import jev
+from jev_ids.detectors.random_forest import RandomForestDetector
 from tests.helpers import CONFIG, JEV_PROMPT, make_flow, make_train, write_dataset
 
 CATEGORIES: list[str] = CONFIG["categories"]

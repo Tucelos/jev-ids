@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 import requests
 
-from somids.detectors import jev
-from somids.run import sample_examples
+from jev_ids.detectors import jev
+from jev_ids.run import sample_examples
 from tests.helpers import (
     CONFIG,
     JEV_PROMPT,

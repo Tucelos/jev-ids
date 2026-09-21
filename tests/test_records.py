@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from somids import records
+from jev_ids import records
 from tests.helpers import make_flow, make_prediction
 
 FLOW = make_flow(3, "dos", novel_attack=True)

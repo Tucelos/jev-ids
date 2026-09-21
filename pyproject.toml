@@ -1,7 +1,7 @@
 [project]
-name = "somids"
+name = "jev-ids"
 version = "0.1.0"
-description = "System One Model (Jev) based intrusion detection: pilot scripts"
+description = "Intrusion detection with TypeSafe's Jev, a System One Model: one network flow per request, one typed verdict"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,6 +10,17 @@ dependencies = [
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
 ]
+
+[project.scripts]
+jev-ids = "jev_ids.cli:main"
+
+# The console script above needs the project installed as a package; hatchling ships the flat `jev_ids/` folder and nothing else.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jev_ids"]
 
 # --- quality gate (added by /quality-init); thresholds live here ---
 [tool.ruff]

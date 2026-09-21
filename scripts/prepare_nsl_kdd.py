@@ -15,7 +15,7 @@ difficulty. The card's `attack_names` gives each name its category: the 22 train
 import argparse
 from pathlib import Path
 
-from somids.dataset import Config, load_config, split_header, write_split
+from jev_ids.dataset import Config, load_config, split_header, write_split
 
 TRAIN_FILE = "KDDTrain+.txt"
 TEST_FILE = "KDDTest+.txt"
@@ -63,7 +63,7 @@ def convert(source: Path, target: Path, config: Config, known: frozenset[str] | 
 
 def main() -> None:
     """Convert the two raw files into pool.csv and test.csv next to the card."""
-    parser = argparse.ArgumentParser(description="prepare NSL-KDD for somids")
+    parser = argparse.ArgumentParser(description="prepare NSL-KDD for Jev IDS")
     parser.add_argument(
         "--raw",
         type=Path,

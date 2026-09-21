@@ -24,8 +24,8 @@ from agno.models.deepseek import DeepSeek
 from agno.run.agent import RunOutput
 from pydantic import BaseModel, Field
 
-from somids.dataset import Flow
-from somids.detectors import chatgpt
+from jev_ids.dataset import Flow
+from jev_ids.detectors import chatgpt
 
 DEFAULT_MODEL = {"deepseek": "deepseek-flash", "openai": "gpt-5.6-luna"}
 # Replaces `{examples}` in the prompt file at k > 0; at k = 0 the placeholder is simply removed.

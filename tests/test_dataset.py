@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from somids import ROOT, dataset
+from jev_ids import ROOT, dataset
 from tests.helpers import CONFIG, make_flow, write_dataset
 
 SHARED_HEADER = ["row_id", "a", "b", "c", "category", "novel_attack"]

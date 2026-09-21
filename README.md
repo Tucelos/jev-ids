@@ -1,79 +1,125 @@
-# SOMIDS
+<img src="docs/banner.svg" alt="Jev IDS · intrusion detection built on TypeSafe's Jev" width="100%" />
 
-Intrusion detection system built on TypeSafe's System One Model Jev,
-evaluated on NSL-KDD against an LLM baseline and a Random Forest. The
-comparison axes are data efficiency (F1 against the number of labeled examples
-per category), cost and latency. A second dataset, NF-UQ-NIDS-v2, is prepared
-in the same shape; the package itself never names a dataset.
+# Jev IDS
 
-## Layout
+**An intrusion detection system that asks TypeSafe's Jev two typed questions about one network flow and gets a verdict back, with no text to parse.**
 
-| Path          | Content                                                                                                                    |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `somids/`     | Package: `cli`, `dataset`, `run`, `records`, `metrics` and `detectors/`; each module's docstring is its reading guide      |
-| `scripts/`    | One preparation script per dataset, run once after the download                                                            |
-| `prompts/`    | Per dataset: `jev.json` (Jev's request template: state and questions) and `llm.md` (the Agno agent's instructions)         |
-| `prices.json` | Dated list prices; `metrics` prices the tokens each row carries                                                            |
-| `data/`       | `raw/` (ignored; downloaded by hand) and one `<dataset>/` folder: the card `dataset.json`, `pool.csv` (ignored), `splits/` |
-| `results/`    | One directory per run: predictions, raw responses, config                                                                  |
-| `CONTEXT.md`  | Glossary of the project's terms                                                                                            |
+Give it one flow record and one labeled example per category. [TypeSafe's Jev](https://docs.typesafe.ai/introduction) answers the probability that the flow is an attack and the category it belongs to, in one request.
 
-## Usage
+**Five labeled flows. F1 0.86 on NSL-KDD. Half a second per verdict.** In the same pilot, GPT-5.6 reached 0.78 at 2.4 s per flow and a Random Forest 0.73. On attacks of a kind absent from the examples, Jev caught 84% and the LLM 55%.
 
-Managed with [uv](https://docs.astral.sh/uv/). Secrets live in `.env`
-(`AI_GATEWAY_API_KEY`, `DEEPSEEK_API_KEY`, `KAGGLE_USERNAME`, `KAGGLE_KEY`,
-`CHATGPT_CLIENT_ID`), never in git.
+[Read the loop](jev_ids/run.py) · [The request template](prompts/nsl-kdd/jev.json) · [Glossary](CONTEXT.md)
 
-A dataset is prepared once: download it by hand into `data/raw/<dataset>/`
-and run its script, which writes `pool.csv` (and, for NSL-KDD, `test.csv`)
-next to the card `data/<dataset>/dataset.json`.
+## The request
 
-```bash
-uv run python -m scripts.prepare_nsl_kdd   # data/raw/nsl-kdd -> data/nsl-kdd/{pool,test}.csv
-uv run python -m scripts.prepare_nf_uq_nids_v2 --novel <CATEGORY> ...   # one pass over the 13.7 GB CSV
+Jev is a System One Model. It takes a `state` and typed questions about it and returns typed answers with probabilities instead of generated text. Jev IDS sends one flow per request. The state holds the instructions, the column header, the five category descriptions, the labeled examples and the flow under test. Two questions point at it:
+
+```text
+is_attack   noul     Is the connection an intrusion attempt?   → 0.82
+category    choice   Which category does it belong to?        → dos, confidence 0.84
 ```
 
-NF-UQ-NIDS-v2 is sampled, not converted: a class-balanced pool and three
-proportional splits in one pass, with the categories named by `--novel` held
-out of the pool as the novel attacks. The script checks the card's feature
-names against the file's header before it samples.
-
-Every run names its dataset by the card:
-
-```bash
-uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector jev --split internal --k 0,1,2,4,8,16 --seeds 0,1,2
-uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --split paper --k 0 --reps 3 --model gpt-5.6-luna
-uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split paper --k 1,2,4,8,16,all
-uv run python -m somids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
-uv run python -m somids compare results/<run_a> results/<run_b>                     # paired, per k and rep
-uv run python -m somids compare results/<jev> results/<rf> --subset novel --k-a 0 --k-b all
+```text
+                          one TypeSafe request
+                    ┌────────────────────────────────┐
+flow + k examples   │ state: instructions, columns,  │
+per category ──────►│        categories, examples,   │
+                    │        flows.under_test        │
+                    │ is_attack (noul)               │──► p_attack ──► ≥ 0.5 → attack
+                    │ category  (choice)             │──► category, confidence
+                    └────────────────────────────────┘
 ```
 
-`run` judges one Flow per request, always in CSV. Jev reads its request
-template from `prompts/<dataset>/jev.json` and the LLMs their instructions
-from `prompts/<dataset>/llm.md`; Python adds only the record and the
-examples, and the sha256 of the file used goes in every row as `prompt_hash`.
-Every run gets a fresh `results/<timestamp>-<dataset>-<detector>-<split>`
-directory with `config.json`, `predictions.jsonl` (one row per Flow: the
-cell, the truth, the Verdict and whatever the detector measured, including
-the provider's token report as `usage`) and `responses.jsonl` (the raw
-answers, ignored by git). `metrics` and `compare` print CSV on stdout and
-write nothing; redirect them to keep a file. Cost is computed there, offline:
-tokens × the list prices of `prices.json`.
+The verdict is p_attack ≥ 0.5, the same cut for every detector. The whole conversation with Jev lives in [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json). Python adds only the flow and the examples, and the sha256 of the file travels in every prediction row as `prompt_hash`. Examples are labeled by category only, so attack names such as `neptune` never reach a model.
 
-The card lists the dataset's features, the symbolic ones among them, its
-categories and the benign label. `pool.csv` and `splits/*.csv` share one
-shape: `row_id`, one column per feature, `category`, `novel_attack`; extra
-columns are trace only. The NSL-KDD splits were drawn by the `split`
-subcommand that existed until 2026-09-21 and are committed as they were
-(`data/nsl-kdd/splits/SOURCE.json` records the draw).
+The same protocol runs two baselines: an LLM through an Agno agent with a JSON output schema (GPT-5.6 through the ChatGPT Codex backend, or DeepSeek), and a scikit-learn Random Forest trained on the same k examples. Every detector judges the same frozen split with the same examples, drawn from the same seeds.
 
-## Quality gate
+## Try it
+
+```bash
+git clone https://github.com/jev-ids/jev-ids.git
+cd jev-ids
+uv sync
+# .env: AI_GATEWAY_API_KEY for Jev through the Vercel AI Gateway; DEEPSEEK_API_KEY and CHATGPT_CLIENT_ID only for the LLM baselines.
+```
+
+Download [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) into `data/raw/nsl-kdd/` and prepare it once:
+
+```bash
+uv run python -m scripts.prepare_nsl_kdd
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split smoke --k 0,1
+```
+
+The smoke split is five flows. The run writes `results/<timestamp>-nsl-kdd-jev-smoke/` with `config.json`, one JSON row per flow in `predictions.jsonl` (the verdict, the truth, p_attack, the category, the confidence, the latency and the gateway's token report) and the raw answers in `responses.jsonl`.
+
+## Compare detectors
+
+```bash
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split pilot --k 0,1,2,4,8,16 --seeds 0,1,2
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --model gpt-5.6-luna --split pilot --k 0,1,2,4,8,16
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,16,all
+uv run jev-ids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
+uv run jev-ids compare results/<jev_run> results/<rf_run> --subset novel --k-a 0 --k-b all
+```
+
+k is the number of labeled examples per category. k = 1 with five categories means five examples, and `all` means the whole pool. `metrics` prints one CSV row per detector and k with F1, recall on novel attacks, tokens, latency and cost. `compare` pairs two runs flow by flow and runs McNemar's test on the discordant pairs, because only the flows two detectors disagree on tell them apart. Cost is computed offline as tokens times the list prices in [`prices.json`](prices.json), for every detector alike.
+
+## Why it is fast and cheap
+
+- **One request per flow, two answers.** Jev evaluates both questions in parallel over the same state. The answers are a probability, an option and a confidence, so there is no text to parse and no output schema to enforce.
+- **Input only.** Jev's list price is $0.042 per million input tokens and output is free. A k = 1 request is about 1,800 tokens, so a million verdicts cost about $74 at list price.
+- **The prompt is a file.** Jev's template and the LLM's instructions are text files hashed into every row. Changing a word changes the hash, and runs with different hashes are never compared as equals.
+- **Flows in the innermost loop.** k, then seed, then repetition, then every flow of the split. The prompt prefix stays constant for as long as possible, so provider prefix caches get their best chance.
+- **Fail open, log everything.** A failed call ends as a row with `error`, never as a crash, and the metrics count it as no alert.
+- **Same cut for everyone.** p_attack ≥ 0.5 decides the verdict for Jev, the LLM and the Random Forest. No per-detector threshold tuning.
+
+## Small enough to read
+
+| File                                                            | Job                                                                        |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [cli.py](jev_ids/cli.py)                                         | `run`, `metrics` and `compare`                                             |
+| [dataset.py](jev_ids/dataset.py)                                 | The card, the pool, the splits and the k-shot example draw                 |
+| [run.py](jev_ids/run.py)                                         | The loop, cell by cell and flow by flow, and the three files of a run      |
+| [records.py](jev_ids/records.py)                                 | One prediction row and its JSONL                                           |
+| [metrics.py](jev_ids/metrics.py)                                 | F1, novel recall, tokens, cost, latency, and the paired comparison         |
+| [detectors/jev.py](jev_ids/detectors/jev.py)                     | Jev through the Vercel AI Gateway, one flow per request                    |
+| [detectors/llm.py](jev_ids/detectors/llm.py)                     | The LLM baselines through Agno                                             |
+| [detectors/random_forest.py](jev_ids/detectors/random_forest.py) | The classical baseline                                                     |
+| [prompts/nsl-kdd/](prompts/nsl-kdd)                             | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
+
+## Evidence and limits
+
+Pilot split of NSL-KDD: 300 flows, 160 of them attacks and 39 of those of a kind absent from KDDTrain+. Three seeds of examples, so 900 predictions per detector and k. Means over the three seeds, from the runs of 2026-09-21.
+
+| Detector                  | k   | F1        | Precision | Recall | Novel-attack recall | Latency  | Cost per 1M flows |
+| ------------------------- | --- | --------- | --------- | ------ | ------------------- | -------- | ----------------- |
+| Jev (`typesafe-ai/jev`)   | 1   | **0.859** | 0.941     | 0.790  | **0.838**           | 504 ms   | $74               |
+| GPT-5.6 (`gpt-5.6-luna`)  | 1   | 0.776     | 0.914     | 0.675  | 0.547               | 2,410 ms | $283              |
+| Random Forest (100 trees) | 1   | 0.728     | 0.574     | 1.000  | 1.000               | 3 ms     | local             |
+| Jev                       | 2   | 0.839     | 0.929     | 0.765  | 0.761               | 494 ms   | $106              |
+| GPT-5.6                   | 2   | 0.807     | 0.930     | 0.715  | 0.573               | 2,476 ms | $399              |
+| Random Forest             | 2   | 0.766     | 0.629     | 0.990  | 0.991               | 2 ms     | local             |
+
+Jev against the Random Forest at k = 1: of 900 paired verdicts, 439 differ. Jev is right in 338 of them and the forest in 101 (McNemar p ≈ 6 × 10⁻³¹). A forest trained on five rows calls almost everything an attack, which is why its recall is perfect and its precision is not.
+
+Limits worth knowing:
+
+- These are pilot numbers, taken to settle the protocol. The reported results will come from the disjoint `paper` split with k up to 16. NF-UQ-NIDS-v2 has a card and a preparation script and no run yet.
+- Latency is the wall clock around the successful HTTP call, measured from the client through the Vercel AI Gateway. The gateway rate-limits often: 1,350 of the 1,800 Jev rows needed at least one retry, and the retries are not in the latency.
+- Cost is tokens times list prices, not what was billed. Jev was free under a promotion until 2026-09-25, and GPT-5.6 ran through the ChatGPT Codex backend, priced here at the public API list rate.
+- The gateway masks Jev's version (it reports `typesafe-ai/jev`; TypeSafe direct reports `jev-1.13.0`). The run date in `config.json` is the only pin.
+- Jev's `noul` answer carries no confidence. Only the `choice` answer does.
+
+## Development
 
 ```bash
 make check
 ```
 
-Python 3.13+. Runs ruff (with Google-style docstring rules), complexipy,
-pyright (strict), pytest with coverage, vulture, pip-audit and jscpd.
-Thresholds live in `pyproject.toml` and `.jscpd.json`.
+Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, pyright in strict mode, pytest with coverage, vulture, pip-audit and jscpd. Thresholds live in `pyproject.toml` and `.jscpd.json`. Runs make paid API calls and write only under `results/`.
+
+Jev IDS is an independent research project and is not affiliated with TypeSafe or Vercel.
+
+---
+
+[TypeSafe docs](https://docs.typesafe.ai/introduction) · [Jev on the Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev) · [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) · [Glossary](CONTEXT.md)

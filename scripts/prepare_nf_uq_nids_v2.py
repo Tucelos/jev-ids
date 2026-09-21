@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from somids.dataset import Config, load_config, split_header, write_split
+from jev_ids.dataset import Config, load_config, split_header, write_split
 
 KAGGLE_DATASET = "aryashah2k/nfuqnidsv2-network-intrusion-detection-dataset"
 LABEL_COLUMN = "Attack"
@@ -39,7 +39,7 @@ RawRow = tuple[int, list[str]]
 
 def parse_args() -> argparse.Namespace:
     """The command line: the raw CSV, the output folder and the sampling knobs."""
-    parser = argparse.ArgumentParser(description="prepare NF-UQ-NIDS-v2 for somids")
+    parser = argparse.ArgumentParser(description="prepare NF-UQ-NIDS-v2 for Jev IDS")
     parser.add_argument(
         "--raw",
         type=Path,
