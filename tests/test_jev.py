@@ -22,8 +22,8 @@ from tests.helpers import (
 BODY: dict[str, Any] = {
     "model": "typesafe-ai/jev",
     "answers": {
-        "is_attack_r0": {"type": "noul", "noul": 0.78},
-        "category_r0": {
+        "is_attack": {"type": "noul", "noul": 0.78},
+        "category": {
             "type": "choice",
             "choice": "r2l",
             "confidence": 0.8,
@@ -72,15 +72,15 @@ def test_request_body_adds_the_flow_the_examples_and_the_rubric(
     body = jev.request_body(detector.template, FLOW, examples)
     state = body["state"]
     assert body["model"] == "typesafe-ai/jev"
-    assert state["records"] == {"r0": FLOW.attributes_csv}
+    assert state["flows"] == {"under_test": FLOW.attributes_csv}
     assert state["instructions"].startswith("You are given one record")
     assert state["columns"] == "a,b,c"
     assert len(state["examples"]) == 3
     assert state["examples"][0].keys() == {"record", "category"}
-    assert set(body["questions"]) == {"is_attack_r0", "category_r0"}
-    assert body["questions"]["category_r0"]["criteria"] == state["categories"]
+    assert set(body["questions"]) == {"is_attack", "category"}
+    assert body["questions"]["category"]["criteria"] == state["categories"]
     # The template itself is untouched: every call starts from the file again.
-    assert "records" not in json.loads(detector.template)["state"]
+    assert "flows" not in json.loads(detector.template)["state"]
     assert "examples" not in jev.request_body(detector.template, FLOW, [])["state"]
 
 

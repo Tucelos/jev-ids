@@ -42,8 +42,8 @@ def test_predict_fits_once_per_examples_object_and_derives_p_attack() -> None:
     attack = detector.predict(TRAIN[2], examples)
     second = detector.predict(TRAIN[4], examples)
 
-    assert detector.fits == 1
-    assert (detector.name, detector.model) == ("rf", f"sklearn-random-forest-{rf.N_ESTIMATORS}")
+    assert detector.fit_count == 1
+    assert (detector.name, detector.model) == ("random_forest", f"sklearn-random-forest-{rf.N_ESTIMATORS}")
     assert detector.prompt_hash is None
     assert set(normal) == {"p_attack", "category_pred", "latency_ms", "train_time_ms"}
     assert 0.0 <= normal["p_attack"] < 0.5 < attack["p_attack"] <= 1.0
@@ -51,7 +51,7 @@ def test_predict_fits_once_per_examples_object_and_derives_p_attack() -> None:
     assert normal["train_time_ms"] == second["train_time_ms"] > 0
     assert normal["latency_ms"] > 0
     detector.predict(TRAIN[0], sample_examples(TRAIN, 1, 1, CATEGORIES))
-    assert detector.fits == 2
+    assert detector.fit_count == 2
 
 
 def test_fit_rejects_zero_shot() -> None:

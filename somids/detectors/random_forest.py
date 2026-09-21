@@ -61,7 +61,7 @@ def feature_vector(flow: Flow, vocabulary: Vocabulary) -> list[float]:
 class RandomForestDetector:
     """Judges Flows with a RandomForestClassifier fitted on the cell's Examples."""
 
-    name = "rf"
+    name = "random_forest"
     prompt_hash = None  # the forest reads no prompt
 
     def __init__(self, vocabulary: Vocabulary, benign: str) -> None:
@@ -74,10 +74,10 @@ class RandomForestDetector:
         self.vocabulary = vocabulary
         self.benign = benign
         self.model = f"sklearn-random-forest-{N_ESTIMATORS}"
-        self.fits = 0
+        self.fit_count = 0
         # The run loop hands the same Examples list to every rep of a cell, so the forest is fitted once per list (by identity) and
         # the training time is repeated in every row of that cell.
-        self._fitted_on: int | None = None
+        self._fitted_on_examples_id: int | None = None
         self._forest: Any = None
         self._train_time_ms = 0.0
 
@@ -87,7 +87,7 @@ class RandomForestDetector:
         A cell's first Flow fits a fresh forest on the Examples, labeled by Category, and times the fit; the rest of the cell reuses it.
         Latency is the wall clock around `predict_proba` alone.
         """
-        if self._fitted_on != id(examples):
+        if self._fitted_on_examples_id != id(examples):
             if not examples:
                 raise ValueError("the Random Forest needs k >= 1: nothing to train at k = 0")
             matrix = np.asarray([feature_vector(example, self.vocabulary) for example in examples], dtype=float)
@@ -96,8 +96,8 @@ class RandomForestDetector:
             started = time.perf_counter()
             self._forest.fit(matrix, labels)
             self._train_time_ms = (time.perf_counter() - started) * 1000
-            self._fitted_on = id(examples)
-            self.fits += 1
+            self._fitted_on_examples_id = id(examples)
+            self.fit_count += 1
         matrix = np.asarray([feature_vector(flow, self.vocabulary)], dtype=float)
         started = time.perf_counter()
         row: list[float] = self._forest.predict_proba(matrix)[0].tolist()

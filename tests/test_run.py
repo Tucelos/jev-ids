@@ -84,7 +84,7 @@ def test_execute_covers_every_cell_in_order_and_writes_the_three_files(card: Pat
     assert {p["n_examples"] for p in predictions} == {0, 3}
     shared = {
         *("run_id", "dataset", "detector", "model", "split", "prompt_hash"),
-        *("k", "seed", "rep", "n_examples", "row_id", "y_true", "y_pred"),
+        *("k", "seed", "repetition", "n_examples", "row_id", "is_attack", "classification_verdict"),
         *("category_true", "novel_attack", "p_attack", "category_pred"),
         *("latency_ms", "usage", "request_id", "ts_utc"),
     }
@@ -108,8 +108,8 @@ def test_predictions_carry_the_truth_and_the_verdict(card: Path) -> None:
     config = dataset.load_config(card)
     run_dir = run.execute(smoke_spec(card), FakeDetector(), config, FLOWS, TRAIN)
     by_row = {p["row_id"]: p for p in records.read_predictions(run_dir)}
-    assert (by_row[100]["y_true"], by_row[100]["y_pred"]) == (0, 0)
-    assert (by_row[101]["y_true"], by_row[101]["y_pred"]) == (1, 1)
+    assert (by_row[100]["is_attack"], by_row[100]["classification_verdict"]) == (0, 0)
+    assert (by_row[101]["is_attack"], by_row[101]["classification_verdict"]) == (1, 1)
     assert (by_row[101]["category_true"], by_row[101]["novel_attack"]) == ("dos", True)
 
 
@@ -117,19 +117,19 @@ def test_run_from_spec_reads_the_dataset_and_fits_the_forest_on_the_pool(
     card: Path,
 ) -> None:
     # End to end from disk with the one Detector that needs no network.
-    run_dir = run.run_from_spec(smoke_spec(card, "rf", k_values=(1, None), reps=2))
+    run_dir = run.run_from_spec(smoke_spec(card, "random_forest", k_values=(1, None), reps=2))
     predictions = records.read_predictions(run_dir)
     assert len(predictions) == 2 * 2 * 3
     assert {p["n_examples"] for p in predictions} == {3, len(TRAIN)}
     assert {p["prompt_hash"] for p in predictions} == {None}
-    assert all(p["y_pred"] in (0, 1) for p in predictions)
+    assert all(p["classification_verdict"] in (0, 1) for p in predictions)
     assert all(p["train_time_ms"] > 0 for p in predictions)
     assert not (run_dir / "responses.jsonl").exists()  # the forest has no raw answer
 
 
 def test_build_detector_knows_the_four_names(card: Path) -> None:
     config = dataset.load_config(card)
-    forest = run.build_detector(run.RunSpec("rf", card, "smoke", (1,), (0,)), config)
+    forest = run.build_detector(run.RunSpec("random_forest", card, "smoke", (1,), (0,)), config)
     assert isinstance(forest, RandomForestDetector)
     # Feature `b` sits at index 1; every TRAIN attribute equals its row index.
     assert forest.vocabulary == {1: ("0", "1", "2", "3", "4", "5")}
@@ -142,7 +142,7 @@ def test_build_detector_knows_the_four_names(card: Path) -> None:
     deepseek_spec = run.RunSpec("llm:deepseek", NSL_KDD, "smoke", (0,), (0,))
     deepseek = run.build_detector(deepseek_spec, nsl_kdd)
     assert (deepseek.name, deepseek.model) == ("llm:deepseek", "deepseek-flash")
-    terra_spec = run.RunSpec("llm:chatgpt", NSL_KDD, "smoke", (0,), (0,), model_id="gpt-5.6-terra")
+    terra_spec = run.RunSpec("llm:openai", NSL_KDD, "smoke", (0,), (0,), model_id="gpt-5.6-terra")
     assert run.build_detector(terra_spec, nsl_kdd).model == "gpt-5.6-terra"
     with pytest.raises(NotImplementedError):
         run.build_detector(run.RunSpec("unknown", card, "smoke", (0,), (0,)), config)
@@ -158,7 +158,7 @@ def test_k_all_is_rf_only_and_rf_cannot_start_at_zero_shot() -> None:
     with pytest.raises(ValueError, match="only meaningful for the Random Forest"):
         run.check_spec(run.RunSpec("jev", NSL_KDD, "smoke", (None,), (0,)), "jev")
     with pytest.raises(ValueError, match="starts at k = 1"):
-        run.check_spec(run.RunSpec("rf", NSL_KDD, "smoke", (0, 1), (0,)), "rf")
+        run.check_spec(run.RunSpec("random_forest", NSL_KDD, "smoke", (0, 1), (0,)), "random_forest")
 
 
 def test_sample_examples_is_balanced_nested_and_deterministic() -> None:
@@ -191,8 +191,8 @@ def test_each_committed_prompt_pair_matches_its_card(name: str) -> None:
     assert body["model"] == "typesafe-ai/jev"
     assert list(body["state"]["categories"]) == config["categories"]
     assert body["state"]["columns"] == ",".join(config["features"])
-    assert set(body["questions"]) == {"is_attack_r0", "category_r0"}
-    assert all("`records.r0`" in q["instructions"] for q in body["questions"].values())
+    assert set(body["questions"]) == {"is_attack", "category"}
+    assert all("`flows.under_test`" in q["instructions"] for q in body["questions"].values())
     text = run.load_prompt(ROOT / "prompts" / name / "llm.md")["text"]
     # The same task text, Categories and columns reach every Detector; the Markdown layout around them belongs to the prompt's author.
     assert body["state"]["instructions"] in text

@@ -8,9 +8,9 @@ In reading order:
 - `measurements`: what one successful answer measured.
 
 The template is the whole conversation with Jev: a `state` (the instructions, the column header, the Category descriptions) and two
-questions that point at state paths in backticks. `is_attack_r0` is a `noul` whose answer is a probability and becomes p_attack;
-`category_r0` is a `choice` over the Categories whose answer is the Category with a confidence. Python adds only what changes per call: the
-Flow under test at `records.r0` and the labeled `examples`. One request judges one Flow (B = 1).
+questions that point at state paths in backticks. `is_attack` is a `noul` whose answer is a probability and becomes p_attack;
+`category` is a `choice` over the Categories whose answer is the Category with a confidence. Python adds only what changes per call: the
+Flow under test at `flows.under_test` and the labeled `examples`. One request judges one Flow (B = 1).
 """
 
 import json
@@ -59,16 +59,16 @@ class JevDetector:
 
 
 def request_body(template: str, flow: Flow, examples: Sequence[Flow]) -> dict[str, Any]:
-    """The template with the Flow at `records.r0` and the Examples, if any.
+    """The template with the Flow at `flows.under_test` and the Examples, if any.
 
     Examples are labeled by Category only, because attack names never reach a model (CONTEXT.md). The Category question grades against the
     descriptions the state already holds, so its `criteria` rubric is copied from `state.categories` here and the file states them once.
     """
     body: dict[str, Any] = json.loads(template)
-    body["state"]["records"] = {"r0": flow.attributes_csv}
+    body["state"]["flows"] = {"under_test": flow.attributes_csv}
     if examples:
         body["state"]["examples"] = [{"record": example.attributes_csv, "category": example.category} for example in examples]
-    body["questions"]["category_r0"]["criteria"] = body["state"]["categories"]
+    body["questions"]["category"]["criteria"] = body["state"]["categories"]
     return body
 
 
@@ -112,9 +112,9 @@ def measurements(body: dict[str, Any], latency_ms: float) -> dict[str, Any]:
     """
     answers = body["answers"]
     return {
-        "p_attack": answers["is_attack_r0"].get("noul"),
-        "category_pred": answers["category_r0"].get("choice"),
-        "confidence": answers["category_r0"].get("confidence"),
+        "p_attack": answers["is_attack"].get("noul"),
+        "category_pred": answers["category"].get("choice"),
+        "confidence": answers["category"].get("confidence"),
         "latency_ms": latency_ms,
         "usage": body.get("usage", {}),
         "raw": body,

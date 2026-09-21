@@ -33,11 +33,11 @@ JEV_PROMPT: dict[str, Any] = {
                 "categories": CATEGORIES,
             },
             "questions": {
-                "is_attack_r0": {
+                "is_attack": {
                     "type": "noul",
-                    "instructions": "Is `records.r0` bad?",
+                    "instructions": "Is `flows.under_test` bad?",
                 },
-                "category_r0": {"type": "choice", "instructions": "Which category?"},
+                "category": {"type": "choice", "instructions": "Which category?"},
             },
         }
     ),
@@ -87,7 +87,7 @@ def write_dataset(root: Path, config: Config, splits: Mapping[str, Sequence[Flow
     return card
 
 
-def make_prediction(row_id: int, y_true: int, p_attack: float | None, **overrides: Any) -> Prediction:
+def make_prediction(row_id: int, is_attack: int, p_attack: float | None, **overrides: Any) -> Prediction:
     """A row as predictions.jsonl holds it, with plain defaults; `overrides` win."""
     prediction: Prediction = {
         "run_id": "r",
@@ -98,12 +98,12 @@ def make_prediction(row_id: int, y_true: int, p_attack: float | None, **override
         "prompt_hash": "h",
         "k": 1,
         "seed": 0,
-        "rep": 0,
+        "repetition": 0,
         "n_examples": 3,
         "row_id": row_id,
-        "y_true": y_true,
-        "y_pred": None if p_attack is None else int(p_attack >= 0.5),
-        "category_true": "dos" if y_true else "normal",
+        "is_attack": is_attack,
+        "classification_verdict": None if p_attack is None else int(p_attack >= 0.5),
+        "category_true": "dos" if is_attack else "normal",
         "novel_attack": False,
         "p_attack": p_attack,
         "latency_ms": 500.0,

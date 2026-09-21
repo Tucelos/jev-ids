@@ -12,13 +12,13 @@
     }
   },
   "questions": {
-    "is_attack_r0": {
+    "is_attack": {
       "type": "noul",
-      "instructions": "Is the connection `records.r0` an intrusion attempt rather than normal traffic? Judge it by `instructions` and `columns`, and by the labeled `examples` when they are present."
+      "instructions": "Is the connection `flows.under_test` an intrusion attempt rather than normal traffic? Judge it by `instructions` and `columns`, and by the labeled `examples` when they are present."
     },
-    "category_r0": {
+    "category": {
       "type": "choice",
-      "instructions": "Which category in `categories` does the connection `records.r0` belong to?"
+      "instructions": "Which category in `categories` does the connection `flows.under_test` belong to?"
     }
   }
 }

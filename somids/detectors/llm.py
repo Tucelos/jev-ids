@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from somids.dataset import Flow
 from somids.detectors import chatgpt
 
-DEFAULT_MODEL = {"deepseek": "deepseek-flash", "chatgpt": "gpt-5.6-luna"}
+DEFAULT_MODEL = {"deepseek": "deepseek-flash", "openai": "gpt-5.6-luna"}
 # Replaces `{examples}` in the prompt file at k > 0; at k = 0 the placeholder is simply removed.
 EXAMPLES_HEADER = "\nLabeled example records (record => category):\n"
 
@@ -51,7 +51,7 @@ class LLMDetector:
 
         Args:
             prompt: `run.load_prompt` of `prompts/<dataset>/llm.md`.
-            provider: `deepseek` or `chatgpt`.
+            provider: `deepseek` or `openai`.
             model_id: the provider's model id; None means the provider default.
         """
         self.template: str = prompt["text"]

@@ -31,16 +31,16 @@ Prediction = dict[str, Any]
 def complete_prediction(measured: dict[str, Any], flow: Flow, cell_fields: dict[str, Any]) -> Prediction:
     """One row: the cell, the Flow's truth, the Verdict, then what was measured.
 
-    `y_true`, `category_true` and `novel_attack` are copied from the Flow so the metrics never need the split file again. `y_pred` is the
-    Verdict at VERDICT_THRESHOLD, or None when the call failed and there is no p_attack; the metrics count such a row as `normal`
-    (fail-open). `request_id` is a client UUID that keys the raw answer in responses.jsonl.
+    `is_attack`, `category_true` and `novel_attack` are copied from the Flow so the metrics never need the split file again.
+    `classification_verdict` is the Verdict at VERDICT_THRESHOLD, or None when the call failed and there is no p_attack; the metrics count
+    such a row as `normal` (fail-open). `request_id` is a client UUID that keys the raw answer in responses.jsonl.
     """
     p_attack = measured.get("p_attack")
     return {
         **cell_fields,
         "row_id": flow.row_id,
-        "y_true": int(flow.is_attack),
-        "y_pred": None if p_attack is None else int(p_attack >= VERDICT_THRESHOLD),
+        "is_attack": int(flow.is_attack),
+        "classification_verdict": None if p_attack is None else int(p_attack >= VERDICT_THRESHOLD),
         "category_true": flow.category,
         "novel_attack": flow.novel_attack,
         **measured,

@@ -123,11 +123,11 @@ def test_chatgpt_path_uses_strict_schema_and_the_preamble(
 ) -> None:
     judgement = llm.Judgement(verdict="normal", category="normal", p_attack=0.1)
     fake_agent.outcomes = [run_output(judgement)]
-    detector = llm.LLMDetector(LLM_PROMPT, "chatgpt", "gpt-5.6-terra")
+    detector = llm.LLMDetector(LLM_PROMPT, "openai", "gpt-5.6-terra")
 
     prediction = detector.predict(FLOW, [])
 
-    assert (detector.name, detector.model) == ("llm:chatgpt", "gpt-5.6-terra")
+    assert (detector.name, detector.model) == ("llm:openai", "gpt-5.6-terra")
     assert isinstance(detector.agno_model, chatgpt.ChatGPTSubscriptionModel)
     assert detector.agno_model.request_params == {"instructions": chatgpt.PREAMBLE}
     assert fake_agent.built[0]["use_json_mode"] is False
@@ -138,7 +138,7 @@ def test_make_model_applies_the_determinism_knobs() -> None:
     deepseek = llm.make_model("deepseek", "deepseek-flash")
     assert isinstance(deepseek, DeepSeek)
     assert (deepseek.temperature, deepseek.use_thinking) == (0.0, False)
-    luna = llm.make_model("chatgpt", "gpt-5.6-luna")
+    luna = llm.make_model("openai", "gpt-5.6-luna")
     assert isinstance(luna, chatgpt.ChatGPTSubscriptionModel)
     assert luna.reasoning_effort == "none"
-    assert llm.LLMDetector(LLM_PROMPT, "chatgpt").model == "gpt-5.6-luna"
+    assert llm.LLMDetector(LLM_PROMPT, "openai").model == "gpt-5.6-luna"

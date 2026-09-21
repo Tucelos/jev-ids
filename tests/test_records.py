@@ -15,7 +15,7 @@ CELL = {
     "prompt_hash": "abc",
     "k": 2,
     "seed": 0,
-    "rep": 0,
+    "repetition": 0,
     "n_examples": 6,
 }
 
@@ -23,18 +23,18 @@ CELL = {
 def test_complete_prediction_adds_cell_truth_verdict_id_and_time() -> None:
     row = records.complete_prediction({"p_attack": 0.7, "latency_ms": 12.0}, FLOW, CELL)
     assert {name: row[name] for name in CELL} == CELL
-    assert (row["row_id"], row["y_true"], row["y_pred"]) == (3, 1, 1)
+    assert (row["row_id"], row["is_attack"], row["classification_verdict"]) == (3, 1, 1)
     assert (row["category_true"], row["novel_attack"]) == ("dos", True)
     assert (row["p_attack"], row["latency_ms"]) == (0.7, 12.0)
     assert len(row["request_id"]) == 36
     assert row["ts_utc"].endswith("+00:00")
     # The Verdict is taken at p_attack >= 0.5, the same point for every Detector.
-    assert records.complete_prediction({"p_attack": 0.5}, FLOW, CELL)["y_pred"] == 1
-    assert records.complete_prediction({"p_attack": 0.49}, FLOW, CELL)["y_pred"] == 0
+    assert records.complete_prediction({"p_attack": 0.5}, FLOW, CELL)["classification_verdict"] == 1
+    assert records.complete_prediction({"p_attack": 0.49}, FLOW, CELL)["classification_verdict"] == 0
     # A failed call has no p_attack at all; its Verdict is None (fail-open).
     measured = {"error": "HTTP 500", "retries": 4}
     failed = records.complete_prediction(measured, FLOW, CELL)
-    assert (failed["y_pred"], failed["error"], failed["retries"]) == (
+    assert (failed["classification_verdict"], failed["error"], failed["retries"]) == (
         None,
         "HTTP 500",
         4,

@@ -34,7 +34,7 @@ TESTBED_COLUMN = "Dataset"
 SPLIT_SIZES = {"smoke": 5, "internal": 50, "paper": 300}
 
 # One retained record: its 0-based index among the data rows (the file line is row_id + 2, the header being line 1) and its raw fields.
-Row = tuple[int, list[str]]
+RawRow = tuple[int, list[str]]
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,7 +75,7 @@ def check_header(header: Sequence[str], config: Config, novel: Sequence[str]) ->
         raise ValueError(f"--novel names {unknown} are not categories of the card")
 
 
-def offer(bucket: list[Row], size: int, seen: int, item: Row, rng: random.Random) -> None:
+def offer_to_reservoir(bucket: list[RawRow], size: int, seen: int, item: RawRow, rng: random.Random) -> None:
     """Reservoir step: keep each row seen so far with probability size/seen."""
     if len(bucket) < size:
         bucket.append(item)
@@ -83,11 +83,11 @@ def offer(bucket: list[Row], size: int, seen: int, item: Row, rng: random.Random
         bucket[slot] = item
 
 
-def sample(path: Path, config: Config, args: argparse.Namespace) -> tuple[list[str], dict[str, list[Row]], list[Row], Counter[str]]:
+def sample(path: Path, config: Config, args: argparse.Namespace) -> tuple[list[str], dict[str, list[RawRow]], list[RawRow], Counter[str]]:
     """One pass: the header, the pool reservoirs, the test reservoir and the counts."""
     rng = random.Random(args.seed)  # noqa: S311  # seeded, reproducible draw
-    pool: dict[str, list[Row]] = defaultdict(list)
-    test: list[Row] = []
+    pool: dict[str, list[RawRow]] = defaultdict(list)
+    test: list[RawRow] = []
     counts: Counter[str] = Counter()
     with path.open(encoding="utf-8", newline="") as handle:
         reader = csv.reader(handle)
@@ -98,18 +98,18 @@ def sample(path: Path, config: Config, args: argparse.Namespace) -> tuple[list[s
             category = fields[label]
             counts[category] += 1
             if category not in args.novel:
-                offer(
+                offer_to_reservoir(
                     pool[category],
                     args.pool_per_category,
                     counts[category],
                     (index, fields),
                     rng,
                 )
-            offer(test, args.test_size, index + 1, (index, fields), rng)
+            offer_to_reservoir(test, args.test_size, index + 1, (index, fields), rng)
     return header, pool, test, counts
 
 
-def shared_rows(header: Sequence[str], config: Config, rows: Sequence[Row], novel: Sequence[str]) -> list[list[object]]:
+def shared_rows(header: Sequence[str], config: Config, rows: Sequence[RawRow], novel: Sequence[str]) -> list[list[object]]:
     """Rows in the shared shape, plus the testbed as the trace column."""
     indexes = [header.index(name) for name in config["features"]]
     label, testbed = header.index(LABEL_COLUMN), header.index(TESTBED_COLUMN)
@@ -125,14 +125,14 @@ def shared_rows(header: Sequence[str], config: Config, rows: Sequence[Row], nove
     ]
 
 
-def cut_splits(test: Sequence[Row], pool_ids: set[int], seed: int) -> dict[str, list[Row]]:
+def cut_splits(test: Sequence[RawRow], pool_ids: set[int], seed: int) -> dict[str, list[RawRow]]:
     """The three disjoint splits, seeded order, from test rows outside the pool."""
     candidates = [row for row in test if row[0] not in pool_ids]
     random.Random(f"{seed}:splits").shuffle(candidates)  # noqa: S311  # seeded
     needed = sum(SPLIT_SIZES.values())
     if len(candidates) < needed:
         raise ValueError(f"{len(candidates)} test rows outside the pool; the splits need {needed}")
-    splits: dict[str, list[Row]] = {}
+    splits: dict[str, list[RawRow]] = {}
     start = 0
     for name, size in SPLIT_SIZES.items():
         splits[name] = candidates[start : start + size]
@@ -184,8 +184,8 @@ def main() -> None:
         "drawn_on": datetime.now(UTC).date().isoformat(),
     }
     (args.out / "splits" / "SOURCE.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    shown = ("source_file", "pool_rows", "sizes", "novel_attack_rows")
-    print(json.dumps({key: manifest[key] for key in shown}, indent=2))
+    printed_keys = ("source_file", "pool_rows", "sizes", "novel_attack_rows")
+    print(json.dumps({key: manifest[key] for key in printed_keys}, indent=2))
 
 
 if __name__ == "__main__":

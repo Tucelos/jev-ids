@@ -42,8 +42,8 @@ Every run names its dataset by the card:
 
 ```bash
 uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector jev --split internal --k 0,1,2,4,8,16 --seeds 0,1,2
-uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector llm:chatgpt --split paper --k 0 --reps 3 --model gpt-5.6-luna
-uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector rf --split paper --k 1,2,4,8,16,all
+uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --split paper --k 0 --reps 3 --model gpt-5.6-luna
+uv run python -m somids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split paper --k 1,2,4,8,16,all
 uv run python -m somids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
 uv run python -m somids compare results/<run_a> results/<run_b>                     # paired, per k and rep
 uv run python -m somids compare results/<jev> results/<rf> --subset novel --k-a 0 --k-b all

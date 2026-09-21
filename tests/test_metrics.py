@@ -18,12 +18,12 @@ PRICES = {"deepseek-flash": DEEPSEEK, "typesafe-ai/jev": JEV}
 
 def make(  # noqa: PLR0913
     row_id: int,
-    y_true: int,
+    is_attack: int,
     p_attack: float | None,
     *,
     k: int | None = 1,
     seed: int = 0,
-    rep: int = 0,
+    repetition: int = 0,
     novel: bool = False,
     error: str | None = None,
     detector: str = "jev",
@@ -31,18 +31,18 @@ def make(  # noqa: PLR0913
 ) -> Prediction:
     return make_prediction(
         row_id,
-        y_true,
+        is_attack,
         p_attack,
         detector=detector,
         split=split,
         k=k,
         n_examples=0 if k is None else 3 * k,
         seed=seed,
-        rep=rep,
+        repetition=repetition,
         novel_attack=novel,
         error=error,
         usage={} if error else {"input_tokens": 100, "output_tokens": 10},
-        request_id=f"q{row_id}-{seed}-{rep}",
+        request_id=f"q{row_id}-{seed}-{repetition}",
     )
 
 
@@ -101,7 +101,7 @@ def test_usage_averages_every_number_present_and_ignores_the_rest() -> None:
     assert summary["cost_usd_per_1m"] == pytest.approx(100 * 0.30 + 10 * 1.20)
     assert summary["latency_ms_mean"] == 500.0
     # A row without any usage or latency (the Random Forest) gives only missing values.
-    assert set(metrics.usage([{"y_true": 1}], PRICES).values()) == {None}
+    assert set(metrics.usage([{"is_attack": 1}], PRICES).values()) == {None}
     assert metrics.mean([]) is None
 
 
@@ -143,9 +143,9 @@ def test_summarize_orders_k_all_last_and_groups_old_rows_without_dataset() -> No
 
 def test_select_keeps_novel_or_known_attacks() -> None:
     rows = [make(0, 1, 1.0, novel=True), make(1, 1, 0.0), make(2, 0, 0.0)]
-    assert [p["row_id"] for p in metrics.select(rows, "all")] == [0, 1, 2]
-    assert [p["row_id"] for p in metrics.select(rows, "novel")] == [0]
-    assert [p["row_id"] for p in metrics.select(rows, "known")] == [1]
+    assert [p["row_id"] for p in metrics.only_subset(rows, "all")] == [0, 1, 2]
+    assert [p["row_id"] for p in metrics.only_subset(rows, "novel")] == [0]
+    assert [p["row_id"] for p in metrics.only_subset(rows, "known")] == [1]
 
 
 def runs() -> tuple[list[Prediction], list[Prediction]]:
@@ -160,8 +160,8 @@ def runs() -> tuple[list[Prediction], list[Prediction]]:
 
 
 def cells_of(rows: Sequence[dict[str, Any]]) -> list[tuple[Any, ...]]:
-    """(k_a, k_b, rep, pairs) of each compare row."""
-    return [(r["k_a"], r["k_b"], r["rep"], r["pairs"]) for r in rows]
+    """(k_a, k_b, repetition, pairs) of each compare row."""
+    return [(r["k_a"], r["k_b"], r["repetition"], r["pairs"]) for r in rows]
 
 
 def test_compare_pairs_by_flow_k_seed_and_rep_and_drops_unmatched() -> None:
@@ -171,9 +171,9 @@ def test_compare_pairs_by_flow_k_seed_and_rep_and_drops_unmatched() -> None:
 
 def test_compare_with_ks_pairs_across_k_and_keeps_reps_apart() -> None:
     a, b = runs()
-    a_rep1 = [make(p["row_id"], p["y_true"], p["p_attack"], k=0, rep=1) for p in a]
-    b_all = [make(p["row_id"], p["y_true"], p["p_attack"], k=None) for p in b]
-    b_all += [make(p["row_id"], p["y_true"], p["p_attack"], k=None, rep=1) for p in b]
+    a_rep1 = [make(p["row_id"], p["is_attack"], p["p_attack"], k=0, repetition=1) for p in a]
+    b_all = [make(p["row_id"], p["is_attack"], p["p_attack"], k=None) for p in b]
+    b_all += [make(p["row_id"], p["is_attack"], p["p_attack"], k=None, repetition=1) for p in b]
     assert metrics.compare(a_rep1, b_all) == []  # without ks the k must match
     rows = metrics.compare([*a, *a_rep1], b_all, across_k=(0, None))
     assert cells_of(rows) == [(0, None, 0, 10), (0, None, 1, 10)]
@@ -192,11 +192,11 @@ def test_compare_orders_k_and_fills_every_field() -> None:
     a_k8 = [make(i, 1, 1.0, k=8, detector="a") for i in range(2)]
     b_k8 = [make(i, 1, 0.0, k=8, detector="b") for i in range(2)]
     results = metrics.compare([*a_k8, *a], [*b_k8, *b])
-    assert [(r["k_a"], r["k_b"], r["rep"]) for r in results] == [(0, 0, 0), (8, 8, 0)]
+    assert [(r["k_a"], r["k_b"], r["repetition"]) for r in results] == [(0, 0, 0), (8, 8, 0)]
     first = results[0]
-    assert list(first) == ["k_a", "k_b", "rep", "pairs", "discordant", "a_right", "b_right", "mcnemar_p", "f1_a", "f1_b"]
+    assert list(first) == ["k_a", "k_b", "repetition", "pairs", "discordant", "a_correct", "b_correct", "mcnemar_p", "f1_a", "f1_b"]
     assert (first["pairs"], first["discordant"]) == (10, 5)
-    assert (first["a_right"], first["b_right"]) == (4, 1)
+    assert (first["a_correct"], first["b_correct"]) == (4, 1)
     assert first["mcnemar_p"] == pytest.approx(2 * 6 / 32)
     assert first["f1_a"] == pytest.approx(8 / 11)
     assert first["f1_b"] == pytest.approx(4 / 10)

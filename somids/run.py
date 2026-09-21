@@ -42,7 +42,7 @@ class RunSpec:
     """Everything the CLI resolved for one run; a parameter bundle, nothing more.
 
     Attributes:
-        detector: `jev`, `llm:deepseek`, `llm:chatgpt` or `rf`.
+        detector: `jev`, `llm:deepseek`, `llm:openai` or `random_forest`.
         dataset: the card of the dataset, `data/<name>/dataset.json`.
         split: the split to judge, a file under `data/<name>/splits/`.
         k_values: Examples per Category to try; None means the whole pool (rf).
@@ -77,10 +77,10 @@ def build_detector(spec: RunSpec, config: Config) -> Detector:
     prompts = ROOT / "prompts" / config["name"]
     if spec.detector == "jev":
         return JevDetector(load_prompt(prompts / "jev.json"))
-    if spec.detector in ("llm:deepseek", "llm:chatgpt"):
+    if spec.detector in ("llm:deepseek", "llm:openai"):
         provider = spec.detector.removeprefix("llm:")
         return LLMDetector(load_prompt(prompts / "llm.md"), provider, spec.model_id)
-    if spec.detector == "rf":
+    if spec.detector == "random_forest":
         # The one-hot vocabulary comes from the whole pool, never from the Examples.
         pool = dataset.load_split(config["dir"] / "pool.csv", config)
         return RandomForestDetector(random_forest.vocabulary(pool, config), config["benign"])
@@ -92,9 +92,9 @@ def check_spec(spec: RunSpec, detector_name: str) -> None:
 
     k = all exists only for the Random Forest, which in turn cannot train on nothing at k = 0.
     """
-    if None in spec.k_values and detector_name != "rf":
+    if None in spec.k_values and detector_name != "random_forest":
         raise ValueError("k = all is only meaningful for the Random Forest")
-    if detector_name == "rf" and 0 in spec.k_values:
+    if detector_name == "random_forest" and 0 in spec.k_values:
         raise ValueError("the Random Forest starts at k = 1")
 
 
@@ -117,13 +117,7 @@ def sample_examples(train: Sequence[Flow], k: int, seed: int, categories: Sequen
     return chosen
 
 
-def execute(
-    spec: RunSpec,
-    detector: Detector,
-    config: Config,
-    flows: Sequence[Flow],
-    train: Sequence[Flow],
-) -> Path:
+def execute(spec: RunSpec, detector: Detector, config: Config, flows: Sequence[Flow], train: Sequence[Flow]) -> Path:
     """Run `detector` over `flows` with Examples drawn from `train`; the run directory.
 
     `config.json` is written first, with what is needed to trace the run to its exact inputs: the resolved spec, the card's name and hash,
@@ -131,7 +125,7 @@ def execute(
     line counting the Flows judged and the rows that came back with an error.
     """
     check_spec(spec, detector.name)
-    # `<UTC timestamp>-<dataset>-<detector>-<split>` names the directory under results/; the colon of `llm:chatgpt` is not a path character.
+    # `<UTC timestamp>-<dataset>-<detector>-<split>` names the directory under results/; the colon of `llm:openai` is not a path character.
     started = datetime.now(UTC)
     run_id = f"{started:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{spec.detector.replace(':', '-')}-{spec.split}"
     run_dir = spec.results_dir / run_id
@@ -160,14 +154,14 @@ def execute(
         # Drawn once per (k, seed) and reused by every rep, so the Random Forest keeps its fit across the repetitions. k = None is
         # the whole pool.
         examples = list(train) if k is None else sample_examples(train, k, seed, config["categories"])
-        for rep in range(spec.reps):
-            cell = {**run_fields, "k": k, "seed": seed, "rep": rep, "n_examples": len(examples)}
+        for repetition in range(spec.reps):
+            cell = {**run_fields, "k": k, "seed": seed, "repetition": repetition, "n_examples": len(examples)}
             errors = 0
             for flow in flows:
                 prediction = complete_prediction(detector.predict(flow, examples), flow, cell)
                 append_prediction(run_dir, prediction)
                 errors += int(prediction.get("error") is not None)
-            print(f"k={k} seed={seed} rep={rep} flows={len(flows)} errors={errors}")
+            print(f"k={k} seed={seed} rep={repetition} flows={len(flows)} errors={errors}")
     print(f"done: {run_dir}")
     return run_dir
 

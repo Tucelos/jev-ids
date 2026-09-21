@@ -44,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     runner = commands.add_parser("run", help="run one detector over one split")
     runner.add_argument("--dataset", required=True, type=Path, help="the card: data/<name>/dataset.json")
-    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:chatgpt or rf")
+    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:openai or random_forest")
     runner.add_argument("--split", required=True, help="internal, pilot, smoke, ...")
     runner.add_argument(
         "--k",
@@ -101,8 +101,8 @@ def compare_command(args: argparse.Namespace) -> None:
     if (args.k_a is None) != (args.k_b is None):
         raise SystemExit("--k-a and --k-b come together")
     across_k = None if args.k_a is None else (parse_k(args.k_a), parse_k(args.k_b))
-    run_a = metrics.select(read_predictions(args.run_a), args.subset)
-    run_b = metrics.select(read_predictions(args.run_b), args.subset)
+    run_a = metrics.only_subset(read_predictions(args.run_a), args.subset)
+    run_b = metrics.only_subset(read_predictions(args.run_b), args.subset)
     print_csv(metrics.compare(run_a, run_b, across_k))
 
 
