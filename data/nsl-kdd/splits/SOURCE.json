@@ -7,7 +7,7 @@
   "seed": 20260920,
   "sizes": {
     "internal": 50,
-    "paper": 300,
+    "paper": 2000,
     "smoke": 5,
     "hard": 100,
     "mid": 240,
@@ -15,7 +15,7 @@
   },
   "novel_attack_rows": {
     "internal": 11,
-    "paper": 45,
+    "paper": 300,
     "smoke": 0,
     "hard": 22,
     "mid": 72,
@@ -33,6 +33,19 @@
       "min_difficulty": 11,
       "max_difficulty": 17,
       "balanced_classes": true
+    }
+  },
+  "draws": {
+    "paper": {
+      "seed": 20260920,
+      "disjoint_from": [
+        "hard",
+        "internal",
+        "mid",
+        "pilot",
+        "smoke"
+      ],
+      "drawn_on": "2026-09-22"
     }
   }
 }
