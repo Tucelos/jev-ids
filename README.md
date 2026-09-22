@@ -11,7 +11,7 @@ Jev IDS was tested on NSL-KDD, a reference benchmark of the cybersecurity commun
 - **4.8× faster** than the LLM.
 - **3.8× cheaper** than the LLM.
 - **1.5× better at catching zero-day attacks** than the LLM.
-- **1.6× more precise** than the Random Forest, which flagged almost every flow.
+- **15× fewer false alarms** than the Random Forest.
 
 The numbers and their limits are in [Evidence and limits](#evidence-and-limits).
 
@@ -99,7 +99,7 @@ Pilot split of NSL-KDD: 300 flows, 160 of them attacks and 39 of those of a kind
 
 Jev against the Random Forest at k = 1: of 900 paired verdicts, 439 differ. Jev is right in 338 of them and the forest in 101 (McNemar p ≈ 6 × 10⁻³¹). A forest trained on five rows calls almost everything an attack, which is why its recall is perfect and its precision is not.
 
-The four multipliers at the top come from the k = 1 rows: 2,410 ms against 504 ms per flow, $283 against $74 per million flows, 55% against 84% of novel attacks caught (attacks of a kind absent from the examples), and precision 0.57 against 0.94 (the share of alarms that were real attacks).
+The four multipliers at the top come from the k = 1 rows: 2,410 ms against 504 ms per flow, $283 against $74 per million flows, 55% against 84% of novel attacks caught (attacks of a kind absent from the examples), and 362 against 24 false alarms on the same 420 benign flows.
 
 Limits worth knowing:
 
