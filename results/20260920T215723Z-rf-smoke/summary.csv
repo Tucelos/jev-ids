@@ -1,4 +1,0 @@
-detector,model,split,k,format,prompt_version,cells,flows,predictions,f1_mean,f1_sd,recall_novel_mean,recall_known_mean,error_rate,input_tokens_mean,output_tokens_mean,cost_usd_per_1m,latency_e2e_ms_mean,latency_provider_ms_mean,verdict_flip_rate,p_attack_sd_mean
-rf,sklearn-random-forest-100,smoke,1,csv,v1,1,5,5,0.3333333333333333,,,1.0,0.0,,,,2.1466083999257535,,,
-rf,sklearn-random-forest-100,smoke,2,csv,v1,1,5,5,0.3333333333333333,,,1.0,0.0,,,,2.1076829987578094,,,
-rf,sklearn-random-forest-100,smoke,,csv,v1,1,5,5,0.0,,,0.0,0.0,,,,2.3043251945637167,,,
