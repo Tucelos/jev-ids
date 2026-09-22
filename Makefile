@@ -1,3 +1,9 @@
+# The virtual environment lives outside the repository unless the shell says otherwise: this folder may sit on a synced volume (iCloud
+# Drive evicts files of .venv and hides its .pth files, so `uv run` hangs or cannot import the package). `?=` keeps any value the shell
+# already exported.
+UV_PROJECT_ENVIRONMENT ?= $(HOME)/.venvs/jev-ids
+export UV_PROJECT_ENVIRONMENT
+
 # Quality gate (added by /quality-init). Thresholds live in pyproject.toml / eslint.config.mjs.
 .PHONY: check fast check-py check-ts check-dup
 
