@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--results-dir", type=Path, default=run.RESULTS_DIR, help="where the run directory is created")
     runner.set_defaults(handler=run_command)
 
-    redoer = commands.add_parser("redo-errors", help="judge again, in place, the error rows of a finished run")
+    redoer = commands.add_parser("redo-errors", help="complete a run in place: its error rows again, its missing flows for the first time")
     redoer.add_argument("run_dir", type=Path, help="results/<run_id> directory")
     redoer.set_defaults(handler=redo_command)
 
@@ -99,7 +99,7 @@ def run_command(args: argparse.Namespace) -> None:
 
 
 def redo_command(args: argparse.Namespace) -> None:
-    """`redo-errors`: judge again, in place, the error rows of the run directory given."""
+    """`redo-errors`: complete the run directory given, in place."""
     run.redo_errors(args.run_dir)
 
 

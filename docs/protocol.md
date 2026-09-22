@@ -32,8 +32,9 @@ detector (`run.sample_examples`).
 run writes `results/paper/<timestamp>-nsl-kdd-<detector>-paper/` with `config.json`, `predictions.jsonl` (one row per flow, k, seed and
 repetition) and, for the API detectors, `responses.jsonl` (raw answers, not in git).
 
-A quota error or a timeout is a row with `error`, not a crash. `uv run jev-ids redo-errors results/paper/<run>` judges those flows again
-in place, in their own cells and with the same examples, and notes the pass under `redone` in `config.json`.
+A quota error or a timeout is a row with `error`, not a crash, and an interrupted run keeps every row written so far.
+`uv run jev-ids redo-errors results/paper/<run>` completes the run in place: the error rows are judged again and the flows never judged,
+for the first time, each in its own cell and with the same examples; the pass is noted under `redone` in `config.json`.
 
 | Target                                                                                                 | Detector                                                                                                                                     | k               | Seeds   | Rows   |
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------- | ------ |

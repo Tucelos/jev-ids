@@ -109,7 +109,7 @@ def test_execute_covers_every_cell_in_order_and_writes_the_three_files(card: Pat
     assert len(lines) == 4 + 1  # one line per cell, then `done:`
 
 
-def test_redo_errors_judges_the_failed_flows_again_in_their_cells(
+def test_redo_errors_judges_the_failed_and_the_missing_flows_in_their_cells(
     card: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     class FlakyDetector(FakeDetector):
@@ -126,6 +126,9 @@ def test_redo_errors_judges_the_failed_flows_again_in_their_cells(
     run_dir = run.execute(smoke_spec(card, k_values=(0, 1)), detector, config, FLOWS, TRAIN)
     before = records.read_predictions(run_dir)
     assert [(p["k"], p["row_id"]) for p in before if p.get("error")] == [(0, 101), (1, 101)]
+    # An interrupted run: the last Flow of the k = 1 cell was never judged.
+    interrupted = before[:-1]
+    (run_dir / "predictions.jsonl").write_text("".join(json.dumps(p) + "\n" for p in interrupted), encoding="utf-8")
 
     def same_detector(spec: run.RunSpec, config: dataset.Config) -> run.Detector:
         return detector
@@ -135,18 +138,26 @@ def test_redo_errors_judges_the_failed_flows_again_in_their_cells(
     assert run.redo_errors(run_dir) == run_dir
 
     after = records.read_predictions(run_dir)
-    # Same six rows, none with an error, the two redone ones appended last with their cell's fields and the right number of Examples.
+    # Six rows again, none with an error: the kept ones first, then the two redone and the one missing, in cell order and split order,
+    # with their cell's fields and the right number of Examples.
     assert len(after) == len(before) and all(p.get("error") is None for p in after)
-    kept = [p for p in before if not p.get("error")]
+    kept = [p for p in interrupted if not p.get("error")]
     assert after[: len(kept)] == kept
     redone = after[len(kept) :]
-    assert [(p["k"], p["row_id"], p["n_examples"], p["p_attack"]) for p in redone] == [(0, 101, 0, 1.0), (1, 101, 3, 1.0)]
-    assert {p["run_id"] for p in after} == {run_dir.name}
-    assert detector.calls[-2:] == [(101, 0), (101, 3)]
+    expected = [(0, 101, 0, 1.0), (1, 101, 3, 1.0), (1, 102, 3, 1.0)]
+    assert [(p["k"], p["row_id"], p["n_examples"], p["p_attack"]) for p in redone] == expected
+    assert {(p["run_id"], p["dataset"], p["detector"], p["model"], p["split"], p["prompt_hash"]) for p in after} == {
+        (run_dir.name, "test", "fake", "fake-1", "smoke", "h")
+    }
+    assert detector.calls[-3:] == [(101, 0), (101, 3), (102, 3)]
     config_json = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
-    assert [entry["rows"] for entry in config_json["redone"]] == [2]
+    assert [(entry["error_rows"], entry["missing_flows"]) for entry in config_json["redone"]] == [(2, 1)]
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-3:] == ["k=0 seed=0 rep=0 flows=1 errors=0", "k=1 seed=0 rep=0 flows=1 errors=0", f"redone: 2 rows of {run_dir}"]
+    assert lines[-3:] == [
+        "k=0 seed=0 rep=0 flows=1 errors=0",
+        "k=1 seed=0 rep=0 flows=2 errors=0",
+        f"redone: 2 error rows and 1 missing flows of {run_dir}",
+    ]
     # Another model or prompt under the same run_id would mix two experiments.
     detector.model = "fake-2"
     with pytest.raises(ValueError, match="fake-1"):
