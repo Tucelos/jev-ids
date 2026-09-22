@@ -40,7 +40,7 @@ def parse_list(text: str) -> tuple[int | None, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The three subcommands; each one carries the function that handles it."""
+    """The four subcommands; each one carries the function that handles it."""
     parser = argparse.ArgumentParser(prog="jev-ids")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--model", help="provider model id, for the LLM detectors")
     runner.add_argument("--results-dir", type=Path, default=run.RESULTS_DIR, help="where the run directory is created")
     runner.set_defaults(handler=run_command)
+
+    redoer = commands.add_parser("redo-errors", help="judge again, in place, the error rows of a finished run")
+    redoer.add_argument("run_dir", type=Path, help="results/<run_id> directory")
+    redoer.set_defaults(handler=redo_command)
 
     reporter = commands.add_parser("metrics", help="summarize one or more runs")
     reporter.add_argument("run_dirs", nargs="+", type=Path, help="results/<run_id> directories")
@@ -92,6 +96,11 @@ def run_command(args: argparse.Namespace) -> None:
         results_dir=args.results_dir,
     )
     run.run_from_spec(spec)
+
+
+def redo_command(args: argparse.Namespace) -> None:
+    """`redo-errors`: judge again, in place, the error rows of the run directory given."""
+    run.redo_errors(args.run_dir)
 
 
 def metrics_command(args: argparse.Namespace) -> None:

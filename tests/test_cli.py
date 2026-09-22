@@ -1,4 +1,4 @@
-"""CLI wiring for the run, metrics and compare subcommands."""
+"""CLI wiring for the run, redo-errors, metrics and compare subcommands."""
 
 from pathlib import Path
 
@@ -38,6 +38,10 @@ def test_run_builds_a_spec_from_the_arguments(monkeypatch: pytest.MonkeyPatch) -
     assert seen[1].seeds == (0, 1, 2)
     assert seen[1].model_id is None
     assert seen[1].results_dir == run.RESULTS_DIR
+    redone: list[Path] = []
+    monkeypatch.setattr(run, "redo_errors", redone.append)
+    assert cli.main(["redo-errors", "results/paper/x"]) == 0
+    assert redone == [Path("results/paper/x")]
 
 
 def test_metrics_prints_one_csv_over_every_run_given(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

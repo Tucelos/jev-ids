@@ -6,8 +6,9 @@ In reading order:
 - `load_prompt`: any prompt file as text plus its sha256; Jev and the LLMs load their files (`jev.json`, `llm.md`) through it alike.
 - `build_detector` and `check_spec`: the Detector named in the spec, and the two combinations of Detector and k that would only waste calls.
 - `sample_examples`: k Examples per Category, seeded and nested across k.
-- `execute`: the loop itself, cell by cell and Flow by Flow, and the three files of the run.
+- `execute` and `judge`: the loop itself, cell by cell and Flow by Flow, and the three files of the run.
 - `run_from_spec`: the CLI entry that strings the above together.
+- `redo_errors`: the other CLI entry, judging again the Flows of a finished run that ended as error rows.
 
 The loop runs k outermost, then seed, then rep, then every Flow of the split, so the prompt prefix stays constant for as long as possible
 and provider prefix caches get their best chance. One request judges one Flow (B = 1). A call that fails ends as a row with `error`, never
@@ -16,6 +17,7 @@ as a crash, and the run goes on.
 
 import hashlib
 import itertools
+import json
 import random
 import subprocess
 from collections.abc import Sequence
@@ -31,9 +33,11 @@ from jev_ids.detectors.isolation_forest import IsolationForestDetector
 from jev_ids.detectors.jev import JevDetector
 from jev_ids.detectors.llm import LLMDetector
 from jev_ids.detectors.random_forest import RandomForestDetector
-from jev_ids.records import append_prediction, complete_prediction, write_config
+from jev_ids.records import append_prediction, complete_prediction, read_predictions, write_config
 
 RESULTS_DIR = ROOT / "results"
+# The fields every row of one (k, seed, rep) cell shares; `redo_errors` copies them from the old row into the new one.
+CELL_FIELDS = ("run_id", "dataset", "detector", "model", "split", "prompt_hash", "k", "seed", "repetition", "n_examples")
 
 # The detectors share no base class; the run loop only needs `name`, `model`, `prompt_hash` and `predict`, which each of them has.
 Detector = JevDetector | LLMDetector | RandomForestDetector | IsolationForestDetector
@@ -169,15 +173,25 @@ def execute(spec: RunSpec, detector: Detector, config: Config, flows: Sequence[F
         # the whole pool.
         examples = list(train) if k is None else sample_examples(train, k, seed, config["categories"])
         for repetition in range(spec.reps):
-            cell = {**run_fields, "k": k, "seed": seed, "repetition": repetition, "n_examples": len(examples)}
-            errors = 0
-            for flow in flows:
-                prediction = complete_prediction(detector.predict(flow, examples), flow, cell)
-                append_prediction(run_dir, prediction)
-                errors += int(prediction.get("error") is not None)
-            print(f"k={k} seed={seed} rep={repetition} flows={len(flows)} errors={errors}")
+            judge(
+                run_dir,
+                detector,
+                flows,
+                examples,
+                {**run_fields, "k": k, "seed": seed, "repetition": repetition, "n_examples": len(examples)},
+            )
     print(f"done: {run_dir}")
     return run_dir
+
+
+def judge(run_dir: Path, detector: Detector, flows: Sequence[Flow], examples: Sequence[Flow], cell: dict[str, Any]) -> None:
+    """One cell: judge every Flow with the cell's Examples, one call and one appended row each, then print the progress line."""
+    errors = 0
+    for flow in flows:
+        prediction = complete_prediction(detector.predict(flow, examples), flow, cell)
+        append_prediction(run_dir, prediction)
+        errors += int(prediction.get("error") is not None)
+    print(f"k={cell['k']} seed={cell['seed']} rep={cell['repetition']} flows={len(flows)} errors={errors}")
 
 
 def run_from_spec(spec: RunSpec) -> Path:
@@ -186,3 +200,47 @@ def run_from_spec(spec: RunSpec) -> Path:
     flows = dataset.load_split(config["dir"] / "splits" / f"{spec.split}.csv", config)
     train = dataset.load_split(config["dir"] / "pool.csv", config)
     return execute(spec, build_detector(spec, config), config, flows, train)
+
+
+def redo_errors(run_dir: Path) -> Path:
+    """Judge again, in place, the Flows of a finished run whose rows ended with `error` (a quota error, a timeout, unparsable JSON).
+
+    The spec comes back from `config.json`, so the directory is the only argument. The rows without error are kept and rewritten first;
+    each failed Flow is judged again inside its (k, seed, rep) cell, with the very Examples of the original draw, and its new row is
+    appended, error or not, so a second pass can follow a first. The detector must still be the same model on the same prompt, or the
+    rows would mix two experiments under one run_id. `responses.jsonl` keeps the raw answers of the failed calls, and `config.json`
+    gains a `redone` entry per pass.
+    """
+    stored = json.loads((run_dir / "config.json").read_text("utf-8"))
+    fields: dict[str, Any] = stored["spec"]
+    spec = RunSpec(
+        detector=fields["detector"],
+        dataset=Path(fields["dataset"]),
+        split=fields["split"],
+        k_values=tuple(fields["k_values"]),
+        seeds=tuple(fields["seeds"]),
+        reps=fields["reps"],
+        model_id=fields["model_id"],
+        results_dir=Path(fields["results_dir"]),
+    )
+    config = dataset.load_config(spec.dataset)
+    flows = {flow.row_id: flow for flow in dataset.load_split(config["dir"] / "splits" / f"{spec.split}.csv", config)}
+    train = dataset.load_split(config["dir"] / "pool.csv", config)
+    detector = build_detector(spec, config)
+    if (detector.model, detector.prompt_hash) != (stored["model"], stored["prompt_hash"]):
+        raise ValueError(f"{run_dir.name} was run with {stored['model']} on prompt {stored['prompt_hash'][:8]}; the code now gives another")
+    rows = read_predictions(run_dir)
+    kept = [row for row in rows if row.get("error") is None]
+    (run_dir / "predictions.jsonl").write_text("".join(json.dumps(row) + "\n" for row in kept), encoding="utf-8")
+    # Grouping the failed rows by cell, so the Examples are drawn once per (k, seed) exactly as `execute` drew them.
+    cells: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("error") is not None:
+            cells.setdefault((row["k"], row["seed"], row["repetition"]), []).append(row)
+    for (k, seed, _repetition), failed in cells.items():
+        examples = list(train) if k is None else sample_examples(train, k, seed, config["categories"])
+        judge(run_dir, detector, [flows[row["row_id"]] for row in failed], examples, {key: failed[0][key] for key in CELL_FIELDS})
+    stored["redone"] = [*stored.get("redone", []), {"at": datetime.now(UTC).isoformat(timespec="seconds"), "rows": len(rows) - len(kept)}]
+    write_config(run_dir, stored)
+    print(f"redone: {len(rows) - len(kept)} rows of {run_dir}")
+    return run_dir
