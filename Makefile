@@ -30,16 +30,16 @@ check-dup:
 
 # Paper protocol (docs/protocol.md): the four detectors over the `paper` split of NSL-KDD into results/paper/, then the summary. Each
 # detector is its own target so they can run in separate terminals; `paper` runs them one after the other. The LLM is the slow one, about
-# 1.7 s per flow, so it is split into one target per k, each its own run directory: `make -j6 paper-llm` runs the six at once (`-j3`
-# halves the load and doubles the wall time); `metrics` and `compare --b` take the six directories together.
+# 1.7 s per flow, so it is split into one target per k, each its own run directory: `make -j5 paper-llm` runs the five at once;
+# `metrics` and `compare --b` take the five directories together. k stops at 8 since 2026-09-22 (docs/protocol.md).
 PAPER_RUN = uv run jev-ids run --dataset data/nsl-kdd/dataset.json --split paper --results-dir results/paper --seeds 0,1,2
-LLM_KS = 0 1 2 4 8 16
+LLM_KS = 0 1 2 4 8
 .PHONY: paper paper-jev paper-llm paper-random-forest paper-isolation-forest paper-summary
 
 paper: paper-jev paper-llm paper-random-forest paper-isolation-forest paper-summary
 
 paper-jev:
-	$(PAPER_RUN) --detector jev --k 0,1,2,4,8,16
+	$(PAPER_RUN) --detector jev --k 0,1,2,4,8
 
 paper-llm: $(addprefix paper-llm-k,$(LLM_KS))
 
@@ -47,7 +47,7 @@ paper-llm-k%:
 	$(PAPER_RUN) --detector llm:openai --model gpt-5.6-luna --k $*
 
 paper-random-forest:
-	$(PAPER_RUN) --detector random_forest --k 1,2,4,8,16,all
+	$(PAPER_RUN) --detector random_forest --k 1,2,4,8,all
 
 paper-isolation-forest:
 	$(PAPER_RUN) --detector isolation_forest --k all

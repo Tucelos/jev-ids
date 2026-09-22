@@ -34,7 +34,7 @@ def test_run_builds_a_spec_from_the_arguments(monkeypatch: pytest.MonkeyPatch) -
     assert seen == [expected]
     argv = ["run", "--dataset", card, "--detector", "jev", "--split", "pilot"]
     assert cli.main(argv) == 0
-    assert seen[1].k_values == (0, 1, 2, 4, 8, 16)
+    assert seen[1].k_values == (0, 1, 2, 4, 8)
     assert seen[1].seeds == (0, 1, 2)
     assert seen[1].model_id is None
     assert seen[1].results_dir == run.RESULTS_DIR

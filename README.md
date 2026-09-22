@@ -52,9 +52,9 @@ The smoke split is five flows. The run writes `results/<timestamp>-nsl-kdd-jev-s
 ## Compare detectors
 
 ```bash
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split pilot --k 0,1,2,4,8,16 --seeds 0,1,2
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --model gpt-5.6-luna --split pilot --k 0,1,2,4,8,16
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,16,all
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split pilot --k 0,1,2,4,8 --seeds 0,1,2
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --model gpt-5.6-luna --split pilot --k 0,1,2,4,8
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,all
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector isolation_forest --split pilot --k all
 uv run jev-ids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
 uv run jev-ids compare --a results/<jev_run> --b results/<rf_run> --subset novel --k-a 0 --k-b all
@@ -109,7 +109,7 @@ The four multipliers at the top come from the k = 1 rows: 2,410 ms against 504 m
 
 Limits worth knowing:
 
-- These are pilot numbers, taken to settle the protocol. The reported results will come from the disjoint `paper` split with k up to 16. NF-UQ-NIDS-v2 has a card and a preparation script and no run yet.
+- These are pilot numbers, taken to settle the protocol. The reported results will come from the disjoint `paper` split with k up to 8. NF-UQ-NIDS-v2 has a card and a preparation script and no run yet.
 - Latency is the wall clock around the successful HTTP call, measured from the client. The pilot ran through the Vercel AI Gateway, which rate-limited often: 1,350 of the 1,800 Jev rows needed at least one retry, and the retries are not in the latency. The code now calls TypeSafe's API directly.
 - Cost is tokens times list prices, not what was billed. Jev was free under a promotion until 2026-09-25, and GPT-5.6 ran through the ChatGPT Codex backend, priced here at the public API list rate.
 - The gateway masked Jev's version in the pilot (it reports `typesafe-ai/jev`). Since 2026-09-21 the request names `jev-1.13.0` and every row records the version that answered.

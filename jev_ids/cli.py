@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument(
         "--k",
         type=parse_list,
-        default=(0, 1, 2, 4, 8, 16),
+        default=(0, 1, 2, 4, 8),
         help="examples per category, comma separated; `all` for the forests",
     )
     runner.add_argument("--seeds", type=parse_list, default=(0, 1, 2), help="seeds of the example draws")
