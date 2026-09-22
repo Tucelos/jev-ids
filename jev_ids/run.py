@@ -17,6 +17,7 @@ as a crash, and the run goes on.
 import hashlib
 import itertools
 import random
+import subprocess
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -129,6 +130,11 @@ def execute(spec: RunSpec, detector: Detector, config: Config, flows: Sequence[F
     started = datetime.now(UTC)
     run_id = f"{started:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{spec.detector.replace(':', '-')}-{spec.split}"
     run_dir = spec.results_dir / run_id
+    # The commit the code was at, with `-dirty` when the working tree had uncommitted changes, so a run can be traced to its exact code;
+    # the split file is hashed for the same reason, because the card's hash does not cover the Flows that were judged.
+    commit = ["git", "describe", "--always", "--dirty", "--abbrev=40"]
+    described = subprocess.run(commit, capture_output=True, text=True, cwd=ROOT, check=False)  # noqa: S603 constant arguments
+    split_path = config["dir"] / "splits" / f"{spec.split}.csv"
     write_config(
         run_dir,
         {
@@ -137,7 +143,9 @@ def execute(spec: RunSpec, detector: Detector, config: Config, flows: Sequence[F
             "detector": detector.name,
             "model": detector.model,
             "dataset": {"name": config["name"], "sha256": config["sha256"]},
+            "split": {"name": spec.split, "sha256": hashlib.sha256(split_path.read_bytes()).hexdigest()},
             "prompt_hash": detector.prompt_hash,
+            "code_commit": described.stdout.strip(),
             "started_at": started.isoformat(timespec="seconds"),
         },
     )

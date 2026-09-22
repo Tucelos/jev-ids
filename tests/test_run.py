@@ -98,7 +98,11 @@ def test_execute_covers_every_cell_in_order_and_writes_the_three_files(card: Pat
     assert config_json["spec"]["k_values"] == [0, 1]
     assert config_json["spec"]["dataset"] == str(card)
     assert config_json["dataset"] == {"name": "test", "sha256": config["sha256"]}
+    split_sha256 = hashlib.sha256((card.parent / "splits" / "smoke.csv").read_bytes()).hexdigest()
+    assert config_json["split"] == {"name": "smoke", "sha256": split_sha256}
     assert (config_json["model"], config_json["prompt_hash"]) == ("fake-1", "h")
+    # The full commit id, `-dirty` appended while the tree has uncommitted changes.
+    assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", config_json["code_commit"])
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "k=0 seed=0 rep=0 flows=3 errors=0"
     assert len(lines) == 4 + 1  # one line per cell, then `done:`
