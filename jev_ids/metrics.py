@@ -1,9 +1,9 @@
 """Tables from predictions.jsonl rows: `summarize` one or more runs, `compare` two.
 
 Helpers first (`verdict`, `mean`, `ratio`, `rate`, `only_subset`, `only_k`, `group_by_fields`), then the scores of one set of rows
-(`scores`), the priced usage (`cost_usd_per_1m`, `usage`), the summary (`summary`, `none_last_key`, `summarize`) and the paired comparison
-(`mcnemar_exact`, `compare_cell`, `compare`). Attack-class F1, not macro; a row without a Verdict counts as `normal` (fail-open); the CLI
-turns the dicts into CSV.
+(`recall_by_category`, `ranking`, `scores`), the priced usage (`cost_usd_per_1m`, `usage`), the summary (`summary`, `none_last_key`,
+`summarize`) and the paired comparison (`mcnemar_exact`, `compare_cell`, `compare`). Attack-class F1, not macro; a row without a Verdict
+counts as `normal` (fail-open) and ranks lowest; the CLI turns the dicts into CSV.
 """
 
 import json
@@ -12,6 +12,8 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from math import comb
 from typing import Any
+
+import sklearn.metrics  # pyright: ignore[reportMissingTypeStubs]
 
 from jev_ids import ROOT
 from jev_ids.records import Prediction
@@ -62,8 +64,35 @@ def group_by_fields(predictions: Iterable[Prediction], fields: Sequence[str]) ->
     return dict(groups)
 
 
+def recall_by_category(attacks: Sequence[Prediction]) -> dict[str, float | None]:
+    """Recall over each attack Category present, on all its rows and on its novel ones.
+
+    One F1 hides that the Categories differ in kind: in NSL-KDD, dos and probe leave a statistical trace while r2l and u2r look like
+    normal sessions, so the paper reports `recall_<category>` and `recall_novel_<category>` beside it.
+    """
+    recalls: dict[str, float | None] = {}
+    for (category,), members in sorted(group_by_fields(attacks, ("category_true",)).items()):
+        recalls[f"recall_{category}"] = rate(members)
+        recalls[f"recall_novel_{category}"] = rate([p for p in members if p["novel_attack"]])
+    return recalls
+
+
+def ranking(rows: Sequence[Prediction]) -> dict[str, float | None]:
+    """PR-AUC (average precision) and ROC-AUC of p_attack against the truth, free of the 0.5 cut.
+
+    Both need an attack and a normal among the rows, else None. A row without p_attack (a failed call) ranks lowest, the fail-open of
+    `verdict`. Average precision is scikit-learn's estimate of the area under the precision-recall curve.
+    """
+    truth = [p["is_attack"] for p in rows]
+    if set(truth) != {0, 1}:
+        return {"pr_auc": None, "roc_auc": None}
+    p_attack = [p.get("p_attack") or 0.0 for p in rows]
+    areas: Any = sklearn.metrics  # no type stubs: the two scorers are reached through Any, as the forests are
+    return {"pr_auc": float(areas.average_precision_score(truth, p_attack)), "roc_auc": float(areas.roc_auc_score(truth, p_attack))}
+
+
 def scores(rows: Sequence[Prediction]) -> dict[str, float | None]:
-    """Attack-class F1, precision, the three recalls and the error rate of the rows."""
+    """Attack-class F1, precision, the recalls, the two areas and the error rate of the rows."""
     attacks = [p for p in rows if p["is_attack"] == 1]
     hits = sum(verdict(p) for p in attacks)  # alerts on attacks: true positives
     alerts = sum(verdict(p) for p in rows)
@@ -73,6 +102,8 @@ def scores(rows: Sequence[Prediction]) -> dict[str, float | None]:
         "recall": rate(attacks),
         "recall_novel": rate(only_subset(rows, "novel")),
         "recall_known": rate(only_subset(rows, "known")),
+        **recall_by_category(attacks),
+        **ranking(rows),
         # A row without a Verdict is a call that failed.
         "error_rate": ratio(sum(p.get("classification_verdict") is None for p in rows), len(rows)),
     }

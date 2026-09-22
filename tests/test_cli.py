@@ -49,8 +49,10 @@ def test_metrics_prints_one_csv_over_every_run_given(tmp_path: Path, capsys: pyt
     assert lines[0].startswith("dataset,detector,model,split,k,cells,flows,predictions,f1_mean,")
     assert lines[0].endswith(",cost_usd_per_1m,latency_ms_mean,duration_mean")
     assert len(lines) == 3
-    assert lines[1] == "test,jev,m,internal,1,1,1,1,1.0,1.0,1.0,,1.0,0.0,,100.0,10.0,,500.0,"
-    assert lines[2] == "test,random_forest,m,internal,1,1,1,1,,,,,,0.0,,,,,500.0,2.0"
+    # After recall_known come recall_dos and recall_novel_dos (the first run's only attack is a known dos), then the two areas, which a
+    # single-class cell leaves empty, then the error rate; the second run has no attack, so its category columns stay empty.
+    assert lines[1] == "test,jev,m,internal,1,1,1,1,1.0,1.0,1.0,,1.0,1.0,,,,0.0,,100.0,10.0,,500.0,"
+    assert lines[2] == "test,random_forest,m,internal,1,1,1,1,,,,,,,,,,0.0,,,,,500.0,2.0"
     assert cli.main(["metrics", str(tmp_path / "empty")]) == 0
     assert capsys.readouterr().out == ""
 

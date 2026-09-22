@@ -68,6 +68,31 @@ def test_scores_count_a_row_without_verdict_as_normal_and_as_an_error() -> None:
     assert scores["error_rate"] == pytest.approx(1 / 6)
     empty = metrics.scores([make(4, 0, 0.1)])
     assert (empty["f1"], empty["recall_novel"], empty["error_rate"]) == (None, None, 0)
+    assert (empty["pr_auc"], empty["roc_auc"]) == (None, None)
+
+
+def test_scores_break_recall_down_by_category_and_rank_p_attack_without_the_cut() -> None:
+    rows = [
+        make(1, 1, 0.9, novel=True),  # dos, novel, hit
+        make(2, 1, 0.4),  # dos, known, miss
+        make(3, 1, 0.7),  # probe, known, hit
+        make(4, 0, 0.1),
+        make(5, 0, 0.6),  # false alarm
+    ]
+    rows[2]["category_true"] = "probe"
+    scores = metrics.scores(rows)
+    assert (scores["recall_dos"], scores["recall_novel_dos"]) == (0.5, 1.0)
+    assert (scores["recall_probe"], scores["recall_novel_probe"]) == (1.0, None)
+    # Ranked by p_attack: 0.9 (attack), 0.7 (attack), 0.6 (normal), 0.4 (attack), 0.1 (normal). Average precision is the mean of the
+    # precision at each attack, 1, 1 and 3/4; ROC-AUC is the share of (attack, normal) pairs ranked right, 5 of 6.
+    assert scores["pr_auc"] == pytest.approx((1 + 1 + 3 / 4) / 3)
+    assert scores["roc_auc"] == pytest.approx(5 / 6)
+    # A failed call ranks lowest: it becomes the worst-ranked attack, and both areas drop.
+    rows[0]["p_attack"] = None
+    assert metrics.scores(rows)["roc_auc"] == pytest.approx(3 / 6)
+    # The keys of one cell come in a fixed order, categories sorted, so the summary columns are stable.
+    assert list(scores)[:5] == ["f1", "precision", "recall", "recall_novel", "recall_known"]
+    assert list(scores)[5:] == ["recall_dos", "recall_novel_dos", "recall_probe", "recall_novel_probe", "pr_auc", "roc_auc", "error_rate"]
 
 
 def test_cost_usd_per_1m_prices_the_usage_at_list_price() -> None:
