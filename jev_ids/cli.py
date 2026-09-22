@@ -46,13 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     runner = commands.add_parser("run", help="run one detector over one split")
     runner.add_argument("--dataset", required=True, type=Path, help="the card: data/<name>/dataset.json")
-    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:openai or random_forest")
+    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:openai, random_forest or isolation_forest")
     runner.add_argument("--split", required=True, help="internal, pilot, smoke, ...")
     runner.add_argument(
         "--k",
         type=parse_list,
         default=(0, 1, 2, 4, 8, 16),
-        help="examples per category, comma separated; `all` for the Random Forest",
+        help="examples per category, comma separated; `all` for the forests",
     )
     runner.add_argument("--seeds", type=parse_list, default=(0, 1, 2), help="seeds of the example draws")
     runner.add_argument("--reps", type=int, default=1, help="repetitions of each (k, seed) cell")

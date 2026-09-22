@@ -11,6 +11,7 @@ import pytest
 
 from jev_ids import ROOT, dataset, records, run
 from jev_ids.detectors import jev
+from jev_ids.detectors.isolation_forest import IsolationForestDetector
 from jev_ids.detectors.random_forest import RandomForestDetector
 from tests.helpers import CONFIG, JEV_PROMPT, make_flow, make_train, write_dataset
 
@@ -131,13 +132,16 @@ def test_run_from_spec_reads_the_dataset_and_fits_the_forest_on_the_pool(
     assert not (run_dir / "responses.jsonl").exists()  # the forest has no raw answer
 
 
-def test_build_detector_knows_the_four_names(card: Path) -> None:
+def test_build_detector_knows_the_five_names(card: Path) -> None:
     config = dataset.load_config(card)
     forest = run.build_detector(run.RunSpec("random_forest", card, "smoke", (1,), (0,)), config)
     assert isinstance(forest, RandomForestDetector)
     # Feature `b` sits at index 1; every TRAIN attribute equals its row index.
     assert forest.vocabulary == {1: ("0", "1", "2", "3", "4", "5")}
     assert forest.benign == "normal"
+    isolation = run.build_detector(run.RunSpec("isolation_forest", card, "smoke", (None,), (0,)), config)
+    assert isinstance(isolation, IsolationForestDetector)
+    assert (isolation.vocabulary, isolation.benign) == (forest.vocabulary, "normal")
     nsl_kdd = dataset.load_config(NSL_KDD)
     jev_spec = run.RunSpec("jev", NSL_KDD, "smoke", (0,), (0,))
     judge = run.build_detector(jev_spec, nsl_kdd)
@@ -158,11 +162,14 @@ def test_run_dir_name_has_timestamp_dataset_detector_and_split(card: Path) -> No
     assert re.fullmatch(r"\d{8}T\d{6}Z-test-llm-deepseek-smoke", run_dir.name)
 
 
-def test_k_all_is_rf_only_and_rf_cannot_start_at_zero_shot() -> None:
+def test_k_all_is_for_the_forests_only_and_each_forest_has_its_k_guard() -> None:
     with pytest.raises(ValueError, match="only meaningful for the Random Forest"):
         run.check_spec(run.RunSpec("jev", NSL_KDD, "smoke", (None,), (0,)), "jev")
     with pytest.raises(ValueError, match="starts at k = 1"):
         run.check_spec(run.RunSpec("random_forest", NSL_KDD, "smoke", (0, 1), (0,)), "random_forest")
+    with pytest.raises(ValueError, match="k = all only"):
+        run.check_spec(run.RunSpec("isolation_forest", NSL_KDD, "smoke", (1, None), (0,)), "isolation_forest")
+    run.check_spec(run.RunSpec("isolation_forest", NSL_KDD, "smoke", (None,), (0,)), "isolation_forest")
 
 
 def test_sample_examples_is_balanced_nested_and_deterministic() -> None:

@@ -27,6 +27,7 @@ from typing import Any
 from jev_ids import ROOT, dataset
 from jev_ids.dataset import Config, Flow
 from jev_ids.detectors import random_forest
+from jev_ids.detectors.isolation_forest import IsolationForestDetector
 from jev_ids.detectors.jev import JevDetector
 from jev_ids.detectors.llm import LLMDetector
 from jev_ids.detectors.random_forest import RandomForestDetector
@@ -34,8 +35,8 @@ from jev_ids.records import append_prediction, complete_prediction, write_config
 
 RESULTS_DIR = ROOT / "results"
 
-# The three detectors share no base class; the run loop only needs `name`, `model`, `prompt_hash` and `predict`, which each of them has.
-Detector = JevDetector | LLMDetector | RandomForestDetector
+# The detectors share no base class; the run loop only needs `name`, `model`, `prompt_hash` and `predict`, which each of them has.
+Detector = JevDetector | LLMDetector | RandomForestDetector | IsolationForestDetector
 
 
 @dataclass(frozen=True)
@@ -43,10 +44,10 @@ class RunSpec:
     """Everything the CLI resolved for one run; a parameter bundle, nothing more.
 
     Attributes:
-        detector: `jev`, `llm:deepseek`, `llm:openai` or `random_forest`.
+        detector: `jev`, `llm:deepseek`, `llm:openai`, `random_forest` or `isolation_forest`.
         dataset: the card of the dataset, `data/<name>/dataset.json`.
         split: the split to judge, a file under `data/<name>/splits/`.
-        k_values: Examples per Category to try; None means the whole pool (rf).
+        k_values: Examples per Category to try; None means the whole pool (the forests).
         seeds: the seeds of the Example draws.
         reps: how often each (k, seed) cell is repeated, for stability.
         model_id: the provider model, for the LLM detectors; None means default.
@@ -81,22 +82,26 @@ def build_detector(spec: RunSpec, config: Config) -> Detector:
     if spec.detector in ("llm:deepseek", "llm:openai"):
         provider = spec.detector.removeprefix("llm:")
         return LLMDetector(load_prompt(prompts / "llm.md"), provider, spec.model_id)
-    if spec.detector == "random_forest":
-        # The one-hot vocabulary comes from the whole pool, never from the Examples.
+    if spec.detector in ("random_forest", "isolation_forest"):
+        # The one-hot vocabulary comes from the whole pool, never from the Examples, and both forests encode a Flow the same way.
         pool = dataset.load_split(config["dir"] / "pool.csv", config)
-        return RandomForestDetector(random_forest.vocabulary(pool, config), config["benign"])
+        forest = RandomForestDetector if spec.detector == "random_forest" else IsolationForestDetector
+        return forest(random_forest.vocabulary(pool, config), config["benign"])
     raise NotImplementedError(f"detector {spec.detector!r} is not implemented")
 
 
 def check_spec(spec: RunSpec, detector_name: str) -> None:
     """Refuse what would waste calls.
 
-    k = all exists only for the Random Forest, which in turn cannot train on nothing at k = 0.
+    k = all exists only for the two forests; the Random Forest cannot train on nothing at k = 0, and the Isolation Forest learns from the
+    benign pool alone, so it runs at k = all only.
     """
-    if None in spec.k_values and detector_name != "random_forest":
-        raise ValueError("k = all is only meaningful for the Random Forest")
+    if None in spec.k_values and detector_name not in ("random_forest", "isolation_forest"):
+        raise ValueError("k = all is only meaningful for the Random Forest and the Isolation Forest")
     if detector_name == "random_forest" and 0 in spec.k_values:
         raise ValueError("the Random Forest starts at k = 1")
+    if detector_name == "isolation_forest" and spec.k_values != (None,):
+        raise ValueError("the Isolation Forest runs at k = all only")
 
 
 def sample_examples(train: Sequence[Flow], k: int, seed: int, categories: Sequence[str]) -> list[Flow]:

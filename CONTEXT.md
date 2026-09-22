@@ -1,8 +1,9 @@
 # Jev IDS
 
 Intrusion detection on network flow records with a System One Model (Jev),
-compared with an LLM baseline and a Random Forest on data efficiency, cost and
-latency. NSL-KDD is the first Dataset and NF-UQ-NIDS-v2 the second.
+compared with an LLM baseline, a Random Forest and an Isolation Forest on data
+efficiency, cost and latency. NSL-KDD is the first Dataset and NF-UQ-NIDS-v2
+the second.
 
 ## Language
 
@@ -70,7 +71,7 @@ _Avoid_: subset, sample, test set.
 
 **Detector**:
 Anything that turns a Flow plus Examples into a Prediction: Jev, an LLM
-baseline or the Random Forest.
+baseline, the Random Forest or the Isolation Forest.
 _Avoid_: model (reserved for a provider's model id), classifier, algorithm.
 
 **Prediction**:
@@ -85,7 +86,8 @@ _Avoid_: label, prediction (when only the binary decision is meant).
 
 **p_attack**:
 The probability that a Flow is an attack, as returned by the Detector: Jev's
-`noul` answer, the number the LLM states, the Random Forest's class probability.
+`noul` answer, the number the LLM states, the Random Forest's class probability,
+the Isolation Forest's anomaly score.
 _Avoid_: score, confidence.
 
 **confidence**:

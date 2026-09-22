@@ -29,7 +29,7 @@ Every request follows the same path:
 
 The whole request is one file, [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json). Python adds only the flow and the examples, and the file's sha256 travels in every prediction row as `prompt_hash`, so runs that asked different things are never compared as equals. Examples are labeled by category only: attack names such as `neptune` never reach a model.
 
-The same flows, examples and 0.5 cut go to two baselines: an LLM through an Agno agent with a JSON output schema (GPT-5.6 through the ChatGPT Codex backend, or DeepSeek) and a scikit-learn Random Forest trained on the same examples.
+The same flows, examples and 0.5 cut go to two baselines: an LLM through an Agno agent with a JSON output schema (GPT-5.6 through the ChatGPT Codex backend, or DeepSeek) and a scikit-learn Random Forest trained on the same examples. A third baseline, an Isolation Forest fitted on the benign flows of the pool alone, never sees an example: it is the unsupervised reference, at k = all only.
 
 ## Try it
 
@@ -72,17 +72,18 @@ k is the number of labeled examples per category. k = 1 with five categories mea
 
 ## Small enough to read
 
-| File                                                             | Job                                                                        |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [cli.py](jev_ids/cli.py)                                         | `run`, `metrics` and `compare`                                             |
-| [dataset.py](jev_ids/dataset.py)                                 | The card, the pool, the splits and the k-shot example draw                 |
-| [run.py](jev_ids/run.py)                                         | The loop, cell by cell and flow by flow, and the three files of a run      |
-| [records.py](jev_ids/records.py)                                 | One prediction row and its JSONL                                           |
-| [metrics.py](jev_ids/metrics.py)                                 | F1, novel recall, tokens, cost, latency, and the paired comparison         |
-| [detectors/jev.py](jev_ids/detectors/jev.py)                     | Jev through TypeSafe's API, one flow per request                           |
-| [detectors/llm.py](jev_ids/detectors/llm.py)                     | The LLM baselines through Agno                                             |
-| [detectors/random_forest.py](jev_ids/detectors/random_forest.py) | The classical baseline                                                     |
-| [prompts/nsl-kdd/](prompts/nsl-kdd)                              | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
+| File                                                                   | Job                                                                        |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [cli.py](jev_ids/cli.py)                                               | `run`, `metrics` and `compare`                                             |
+| [dataset.py](jev_ids/dataset.py)                                       | The card, the pool, the splits and the k-shot example draw                 |
+| [run.py](jev_ids/run.py)                                               | The loop, cell by cell and flow by flow, and the three files of a run      |
+| [records.py](jev_ids/records.py)                                       | One prediction row and its JSONL                                           |
+| [metrics.py](jev_ids/metrics.py)                                       | F1, novel recall, tokens, cost, latency, and the paired comparison         |
+| [detectors/jev.py](jev_ids/detectors/jev.py)                           | Jev through TypeSafe's API, one flow per request                           |
+| [detectors/llm.py](jev_ids/detectors/llm.py)                           | The LLM baselines through Agno                                             |
+| [detectors/random_forest.py](jev_ids/detectors/random_forest.py)       | The classical baseline                                                     |
+| [detectors/isolation_forest.py](jev_ids/detectors/isolation_forest.py) | The unsupervised baseline, fitted on benign traffic alone                  |
+| [prompts/nsl-kdd/](prompts/nsl-kdd)                                    | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
 
 ## Evidence and limits
 
