@@ -2,7 +2,7 @@
 
 # Jev IDS
 
-![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-0B6B3A?style=flat&labelColor=121917) ![Detector Jev, from TypeSafe](https://img.shields.io/badge/detector-Jev%20%28TypeSafe%29-0B6B3A?style=flat&labelColor=121917) ![Dataset NSL-KDD](https://img.shields.io/badge/dataset-NSL--KDD-0B6B3A?style=flat&labelColor=121917) ![Pilot F1 0.86](https://img.shields.io/badge/pilot%20F1-0.86-0B6B3A?style=flat&labelColor=121917)
+![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-0B6B3A?style=flat&labelColor=121917) ![Detector Jev, from TypeSafe](https://img.shields.io/badge/detector-Jev%20%28TypeSafe%29-0B6B3A?style=flat&labelColor=121917) ![Dataset NSL-KDD](https://img.shields.io/badge/dataset-NSL--KDD-0B6B3A?style=flat&labelColor=121917) ![Pilot F1 0.86](https://img.shields.io/badge/pilot%20F1-0.86-0B6B3A?style=flat&labelColor=121917) ![License MIT](https://img.shields.io/badge/license-MIT-0B6B3A?style=flat&labelColor=121917)
 
 **Intrusion detection in one request. Show [TypeSafe's Jev](https://docs.typesafe.ai/introduction) one network flow and five labeled examples. It answers whether the flow is an attack and which kind, in half a second, with no text to parse.**
 

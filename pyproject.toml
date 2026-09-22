@@ -3,6 +3,7 @@ name = "jev-ids"
 version = "0.1.0"
 description = "Intrusion detection with TypeSafe's Jev, a System One Model: one network flow per request, one typed verdict"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
     "agno[openai]>=3.0.10",
