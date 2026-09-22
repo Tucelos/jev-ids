@@ -10,6 +10,7 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
+    "typesafe-sdk>=0.7.1",
 ]
 
 [project.scripts]
@@ -63,6 +64,7 @@ min_confidence = 80
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.13.0",
     "kaggle>=2.2.4",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
