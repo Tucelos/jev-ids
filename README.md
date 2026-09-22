@@ -55,11 +55,16 @@ The smoke split is five flows. The run writes `results/<timestamp>-nsl-kdd-jev-s
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split pilot --k 0,1,2,4,8,16 --seeds 0,1,2
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --model gpt-5.6-luna --split pilot --k 0,1,2,4,8,16
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,16,all
+uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector isolation_forest --split pilot --k all
 uv run jev-ids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
 uv run jev-ids compare results/<jev_run> results/<rf_run> --subset novel --k-a 0 --k-b all
 ```
 
-k is the number of labeled examples per category. k = 1 with five categories means five examples, and `all` means the whole pool. `metrics` prints one CSV row per detector and k with F1, recall on novel attacks, tokens, latency and cost. `compare` pairs two runs flow by flow and runs McNemar's test on the discordant pairs, because only the flows two detectors disagree on tell them apart. Cost is computed offline as tokens times the list prices in [`prices.json`](prices.json), for every detector alike.
+k is the number of labeled examples per category. k = 1 with five categories means five examples, and `all` means the whole pool. `metrics` prints one CSV row per detector and k with F1, recall on novel attacks and per category, PR-AUC and ROC-AUC of p_attack, tokens, latency and cost. `compare` pairs two runs flow by flow and runs McNemar's test on the discordant pairs, because only the flows two detectors disagree on tell them apart. Cost is computed offline as tokens times the list prices in [`prices.json`](prices.json), for every detector alike.
+
+## Reproduce the paper
+
+[`docs/protocol.md`](docs/protocol.md) fixes the inputs (the 2,000-flow `paper` split, the prompts, the model ids, the prices) and `make paper` runs the four detectors over that split into `results/paper/` and writes `results/paper/summary.csv`. Each detector has its own target (`make paper-jev`, `make paper-llm`, `make paper-random-forest`, `make paper-isolation-forest`), so they can run in separate terminals; the LLM is the slow one.
 
 ## Why it is fast and cheap
 

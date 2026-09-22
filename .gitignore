@@ -11,6 +11,6 @@ data/*
 data/raw/
 data/*/pool.csv
 data/*/test.csv
-results/*/responses.jsonl
+results/**/responses.jsonl
 *.log
 dev-docs/

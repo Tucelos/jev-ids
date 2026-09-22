@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--seeds", type=parse_list, default=(0, 1, 2), help="seeds of the example draws")
     runner.add_argument("--reps", type=int, default=1, help="repetitions of each (k, seed) cell")
     runner.add_argument("--model", help="provider model id, for the LLM detectors")
+    runner.add_argument("--results-dir", type=Path, default=run.RESULTS_DIR, help="where the run directory is created")
     runner.set_defaults(handler=run_command)
 
     reporter = commands.add_parser("metrics", help="summarize one or more runs")
@@ -88,6 +89,7 @@ def run_command(args: argparse.Namespace) -> None:
         seeds=args.seeds,
         reps=args.reps,
         model_id=args.model,
+        results_dir=args.results_dir,
     )
     run.run_from_spec(spec)
 

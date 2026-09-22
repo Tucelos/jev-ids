@@ -28,15 +28,16 @@ def test_run_builds_a_spec_from_the_arguments(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(run, "run_from_spec", fake_run)
     card = "data/x/dataset.json"
     argv = ["run", "--dataset", card, "--detector", "random_forest", "--split", "smoke"]
-    argv += ["--k", "1,all", "--seeds", "1", "--reps", "3", "--model", "m"]
+    argv += ["--k", "1,all", "--seeds", "1", "--reps", "3", "--model", "m", "--results-dir", "results/paper"]
     assert cli.main(argv) == 0
-    expected = run.RunSpec("random_forest", Path(card), "smoke", (1, None), (1,), reps=3, model_id="m")
+    expected = run.RunSpec("random_forest", Path(card), "smoke", (1, None), (1,), reps=3, model_id="m", results_dir=Path("results/paper"))
     assert seen == [expected]
     argv = ["run", "--dataset", card, "--detector", "jev", "--split", "pilot"]
     assert cli.main(argv) == 0
     assert seen[1].k_values == (0, 1, 2, 4, 8, 16)
     assert seen[1].seeds == (0, 1, 2)
     assert seen[1].model_id is None
+    assert seen[1].results_dir == run.RESULTS_DIR
 
 
 def test_metrics_prints_one_csv_over_every_run_given(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
