@@ -4,37 +4,32 @@
 
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-0B6B3A?style=flat&labelColor=121917) ![Detector Jev, from TypeSafe](https://img.shields.io/badge/detector-Jev%20%28TypeSafe%29-0B6B3A?style=flat&labelColor=121917) ![Dataset NSL-KDD](https://img.shields.io/badge/dataset-NSL--KDD-0B6B3A?style=flat&labelColor=121917) ![Pilot F1 0.86](https://img.shields.io/badge/pilot%20F1-0.86-0B6B3A?style=flat&labelColor=121917)
 
-**An intrusion detection system that asks TypeSafe's Jev two typed questions about one network flow and gets a verdict back, with no text to parse.**
+**Intrusion detection in one request. Show [TypeSafe's Jev](https://docs.typesafe.ai/introduction) one network flow and five labeled examples. It answers whether the flow is an attack and which kind, in half a second, with no text to parse.**
 
-Give it one flow record and one labeled example per category. [TypeSafe's Jev](https://docs.typesafe.ai/introduction) answers the probability that the flow is an attack and the category it belongs to, in one request.
+Jev IDS was tested on NSL-KDD, a reference benchmark of the cybersecurity community, against a state-of-the-art LLM (GPT-5.6 Luna) and a classic machine-learning model (Random Forest). Given the same five examples, Jev IDS was:
 
-**Five labeled flows. F1 0.86 on NSL-KDD. Half a second per verdict.** In the same pilot, GPT-5.6 reached 0.78 at 2.4 s per flow and a Random Forest 0.73. On attacks of a kind absent from the examples, Jev caught 84% and the LLM 55%.
+- **4.8× faster** than the LLM.
+- **3.8× cheaper** than the LLM.
+- **1.5× better at catching zero-day attacks** than the LLM.
+- **1.6× more precise** than the Random Forest, which flagged almost every flow.
+
+The numbers and their limits are in [Evidence and limits](#evidence-and-limits).
 
 [Read the loop](jev_ids/run.py) · [The request template](prompts/nsl-kdd/jev.json) · [Glossary](CONTEXT.md)
 
-## The request
+## How it works
 
-Jev is a System One Model. It takes a `state` and typed questions about it and returns typed answers with probabilities instead of generated text. Jev IDS sends one flow per request. The state holds the instructions, the column header, the five category descriptions, the labeled examples and the flow under test. Two questions point at it:
+Jev is a System One Model. Instead of writing text, it reads a `state` and answers typed questions about it with probabilities. Jev IDS puts one flow into the state, next to the instructions, the column names, the five category descriptions and the labeled examples, and asks two questions. `is_attack` comes back as a probability. `category` comes back as one of five options with a confidence. The verdict is attack when the probability reaches 0.5.
 
-```text
-is_attack   noul     Is the connection an intrusion attempt?   → 0.82
-category    choice   Which category does it belong to?        → dos, confidence 0.84
-```
+<img src="docs/verdict.svg" alt="One flow, two typed answers: is_attack, a noul question, returns 0.82, above the 0.5 cut, so the verdict is attack; category, a choice question, returns dos with confidence 0.84" width="100%" />
 
-```text
-                          one TypeSafe request
-                    ┌────────────────────────────────┐
-flow + k examples   │ state: instructions, columns,  │
-per category ──────►│        categories, examples,   │
-                    │        flows.under_test        │
-                    │ is_attack (noul)               │──► p_attack ──► ≥ 0.5 → attack
-                    │ category  (choice)             │──► category, confidence
-                    └────────────────────────────────┘
-```
+Every request follows the same path:
 
-The verdict is p_attack ≥ 0.5, the same cut for every detector. The whole conversation with Jev lives in [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json). Python adds only the flow and the examples, and the sha256 of the file travels in every prediction row as `prompt_hash`. Examples are labeled by category only, so attack names such as `neptune` never reach a model.
+<img src="docs/request.svg" alt="The flow under test and the labeled examples go into one request to Jev, whose state holds instructions, columns, categories, examples and the flow, with two typed questions; the answers come back as p_attack 0.82, verdict attack, and category dos with confidence 0.84" width="100%" />
 
-The same protocol runs two baselines: an LLM through an Agno agent with a JSON output schema (GPT-5.6 through the ChatGPT Codex backend, or DeepSeek), and a scikit-learn Random Forest trained on the same k examples. Every detector judges the same frozen split with the same examples, drawn from the same seeds.
+The whole request is one file, [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json). Python adds only the flow and the examples, and the file's sha256 travels in every prediction row as `prompt_hash`, so runs that asked different things are never compared as equals. Examples are labeled by category only: attack names such as `neptune` never reach a model.
+
+The same flows, examples and 0.5 cut go to two baselines: an LLM through an Agno agent with a JSON output schema (GPT-5.6 through the ChatGPT Codex backend, or DeepSeek) and a scikit-learn Random Forest trained on the same examples.
 
 ## Try it
 
@@ -68,12 +63,12 @@ k is the number of labeled examples per category. k = 1 with five categories mea
 
 ## Why it is fast and cheap
 
-- **One request per flow, two answers.** Jev evaluates both questions in parallel over the same state. The answers are a probability, an option and a confidence, so there is no text to parse and no output schema to enforce.
-- **Input only.** Jev's list price is $0.042 per million input tokens and output is free. A k = 1 request is about 1,800 tokens, so a million verdicts cost about $74 at list price.
-- **The prompt is a file.** Jev's template and the LLM's instructions are text files hashed into every row. Changing a word changes the hash, and runs with different hashes are never compared as equals.
-- **Flows in the innermost loop.** k, then seed, then repetition, then every flow of the split. The prompt prefix stays constant for as long as possible, so provider prefix caches get their best chance.
-- **Fail open, log everything.** A failed call ends as a row with `error`, never as a crash, and the metrics count it as no alert.
-- **Same cut for everyone.** p_attack ≥ 0.5 decides the verdict for Jev, the LLM and the Random Forest. No per-detector threshold tuning.
+- **One request, two answers.** Both questions run over the same state and come back as a probability, an option and a confidence. Nothing to parse, no schema to enforce.
+- **Input only.** Jev charges $0.042 per million input tokens and nothing for output. At about 1,800 tokens per flow, a million verdicts cost about $74.
+- **The prompt is a file.** Its sha256 rides in every row, so runs with different prompts are never compared as equals.
+- **Flows in the innermost loop.** The prompt prefix stays constant as long as possible, so provider caches get their best chance.
+- **Fail open.** A failed call becomes a row with `error`, counted as no alert. Never a crash.
+- **Same cut for everyone.** p_attack ≥ 0.5 decides for Jev, the LLM and the forest. No per-detector tuning.
 
 ## Small enough to read
 
@@ -104,6 +99,8 @@ Pilot split of NSL-KDD: 300 flows, 160 of them attacks and 39 of those of a kind
 
 Jev against the Random Forest at k = 1: of 900 paired verdicts, 439 differ. Jev is right in 338 of them and the forest in 101 (McNemar p ≈ 6 × 10⁻³¹). A forest trained on five rows calls almost everything an attack, which is why its recall is perfect and its precision is not.
 
+The four multipliers at the top come from the k = 1 rows: 2,410 ms against 504 ms per flow, $283 against $74 per million flows, 55% against 84% of novel attacks caught (attacks of a kind absent from the examples), and precision 0.57 against 0.94 (the share of alarms that were real attacks).
+
 Limits worth knowing:
 
 - These are pilot numbers, taken to settle the protocol. The reported results will come from the disjoint `paper` split with k up to 16. NF-UQ-NIDS-v2 has a card and a preparation script and no run yet.
@@ -119,6 +116,28 @@ make check
 ```
 
 Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, pyright in strict mode, pytest with coverage, vulture, pip-audit and jscpd. Thresholds live in `pyproject.toml` and `.jscpd.json`. Runs make paid API calls and write only under `results/`.
+
+## Team
+
+<table align="center">
+  <tr>
+    <td align="center" width="220">
+      <a href="https://github.com/paulosevero"><img src="https://github.com/paulosevero.png?size=120" width="96" alt="Paulo Severo" /></a><br />
+      <b>Paulo Severo</b><br />
+      <a href="https://github.com/paulosevero"><code>@paulosevero</code></a>
+    </td>
+    <td align="center" width="220">
+      <a href="https://github.com/sequincozes"><img src="https://github.com/sequincozes.png?size=120" width="96" alt="Silvio Quincozes" /></a><br />
+      <b>Silvio Quincozes</b><br />
+      <a href="https://github.com/sequincozes"><code>@sequincozes</code></a>
+    </td>
+    <td align="center" width="220">
+      <a href="https://github.com/amandadiasdev"><img src="https://github.com/amandadiasdev.png?size=120" width="96" alt="Amanda Dias" /></a><br />
+      <b>Amanda Dias</b><br />
+      <a href="https://github.com/amandadiasdev"><code>@amandadiasdev</code></a>
+    </td>
+  </tr>
+</table>
 
 Jev IDS is an independent research project and is not affiliated with TypeSafe or Vercel.
 
