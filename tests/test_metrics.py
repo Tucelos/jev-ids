@@ -13,7 +13,7 @@ from tests.helpers import make_prediction
 # The `models` entries of prices.json used below.
 DEEPSEEK = {"input": 0.30, "cached_input": 0.006, "output": 1.20}
 JEV = {"input": 0.042, "cached_input": 0.042, "output": 0.0}
-PRICES = {"deepseek-flash": DEEPSEEK, "typesafe-ai/jev": JEV}
+PRICES = {"deepseek-flash": DEEPSEEK, "jev-1.13.0": JEV}
 
 
 def make(  # noqa: PLR0913
@@ -73,7 +73,7 @@ def test_scores_count_a_row_without_verdict_as_normal_and_as_an_error() -> None:
 def test_cost_usd_per_1m_prices_the_usage_at_list_price() -> None:
     # 1,001 input tokens of Jev: 42.042 USD per 1M such calls, the gateway's own `marketCost` of the pilot row (4.2042e-05 USD) times
     # 10⁶.
-    jev_row = make_prediction(1, 1, 0.9, model="typesafe-ai/jev")
+    jev_row = make_prediction(1, 1, 0.9, model="jev-1.13.0")
     jev_row["usage"] = {"input_tokens": 1001, "output_tokens": 77}
     assert metrics.cost_usd_per_1m(jev_row, PRICES) == pytest.approx(42.042)
     # Cached input tokens are a subset of the input and pay the cache rate.
@@ -114,7 +114,7 @@ def test_summarize_has_one_row_per_group_averaged_over_cells() -> None:
         make(1, 1, None, k=0, error="boom"),
     ]
     for prediction in predictions:
-        prediction["model"] = "typesafe-ai/jev"
+        prediction["model"] = "jev-1.13.0"
     zero_shot, one_shot = metrics.summarize(predictions)
     assert (zero_shot["k"], one_shot["k"]) == (0, 1)
     assert list(one_shot)[:5] == ["dataset", "detector", "model", "split", "k"]

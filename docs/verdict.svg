@@ -14,7 +14,7 @@
 
   <!-- Title and provenance: which flow, which model, how many tokens -->
   <text class="mono" font-size="26" font-weight="700" x="56" y="60" fill="#E9F2EC">two typed questions, two typed answers</text>
-  <text class="mono" font-size="17" x="56" y="90" fill="#8E9A93">flow 3987 of NSL-KDD · one request to typesafe-ai/jev · 1,767 tokens in, 77 out · pilot run of 2026-09-21</text>
+  <text class="mono" font-size="17" x="56" y="90" fill="#8E9A93">flow 3987 of NSL-KDD · one request to jev-1.13.0 · 1,767 tokens in, 77 out · pilot run of 2026-09-21</text>
 
   <!-- Question 1: a noul answer is one probability, shown on a 0 to 1 meter with the 0.5 cut marked -->
   <g id="is-attack">

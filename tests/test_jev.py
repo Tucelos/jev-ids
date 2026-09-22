@@ -18,9 +18,9 @@ from tests.helpers import (
     no_sleep,
 )
 
-# Trimmed from a real gateway response captured on 2026-09-20 (warezmaster row).
+# The answer shape of docs.typesafe.ai/api (read on 2026-09-21) with the numbers of a pilot row (warezmaster, 2026-09-20).
 BODY: dict[str, Any] = {
-    "model": "typesafe-ai/jev",
+    "model": "jev-1.13.0",
     "answers": {
         "is_attack": {"type": "noul", "noul": 0.78},
         "category": {
@@ -31,7 +31,6 @@ BODY: dict[str, Any] = {
         },
     },
     "usage": {"input_tokens": 1606, "output_tokens": 79},
-    "provider_metadata": {"gateway": {"cost": "0", "marketCost": "0.000067452"}},
 }
 FLOW = make_flow(9, "r2l", value="1")
 TRAIN = make_train(["normal", "dos", "probe"])
@@ -61,7 +60,7 @@ def detector(monkeypatch: pytest.MonkeyPatch) -> jev.JevDetector:
 def test_detector_reads_the_model_and_the_hash_off_the_template(
     detector: jev.JevDetector,
 ) -> None:
-    assert (detector.name, detector.model) == ("jev", "typesafe-ai/jev")
+    assert (detector.name, detector.model) == ("jev", "jev-1.13.0")
     assert detector.prompt_hash == "h"
 
 
@@ -71,7 +70,7 @@ def test_request_body_adds_the_flow_the_examples_and_the_rubric(
     examples = sample_examples(TRAIN, 1, 0, CONFIG["categories"])
     body = jev.request_body(detector.template, FLOW, examples)
     state = body["state"]
-    assert body["model"] == "typesafe-ai/jev"
+    assert body["model"] == "jev-1.13.0"
     assert state["flows"] == {"under_test": FLOW.attributes_csv}
     assert state["instructions"].startswith("You are given one record")
     assert state["columns"] == "a,b,c"
@@ -84,10 +83,11 @@ def test_request_body_adds_the_flow_the_examples_and_the_rubric(
     assert "examples" not in jev.request_body(detector.template, FLOW, [])["state"]
 
 
-def test_predict_reads_the_gateway_answer(detector: jev.JevDetector, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_predict_reads_the_answer_and_the_version(detector: jev.JevDetector, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(requests, "post", posting(FakeResponse(200, BODY)))
     prediction = detector.predict(FLOW, [])
     assert prediction["p_attack"] == 0.78
+    assert prediction["model"] == "jev-1.13.0"
     assert prediction["category_pred"] == "r2l"
     assert prediction["confidence"] == 0.8
     assert prediction["usage"] == {"input_tokens": 1606, "output_tokens": 79}
@@ -122,5 +122,5 @@ def test_network_errors_give_up_after_five_attempts(detector: jev.JevDetector, m
 
 def test_missing_api_key_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(jev.API_KEY_VAR, raising=False)
-    with pytest.raises(RuntimeError, match="AI_GATEWAY_API_KEY"):
+    with pytest.raises(RuntimeError, match="TYPESAFE_API_KEY"):
         jev.JevDetector(JEV_PROMPT).predict(FLOW, [])

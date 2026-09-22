@@ -188,7 +188,7 @@ def test_load_prompt_hashes_the_bytes(tmp_path: Path) -> None:
 def test_each_committed_prompt_pair_matches_its_card(name: str) -> None:
     config = dataset.load_config(ROOT / "data" / name / "dataset.json")
     body = json.loads(run.load_prompt(ROOT / "prompts" / name / "jev.json")["text"])
-    assert body["model"] == "typesafe-ai/jev"
+    assert body["model"] == "jev-1.13.0"
     assert list(body["state"]["categories"]) == config["categories"]
     assert body["state"]["columns"] == ",".join(config["features"])
     assert set(body["questions"]) == {"is_attack", "category"}

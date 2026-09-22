@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480"
      role="img" aria-labelledby="request-title">
-  <title id="request-title">How Jev IDS works: the flow under test and k labeled examples per category go into one request to typesafe-ai/jev, whose state holds instructions, columns, categories, examples and flows.under_test, with two questions, is_attack as noul and category as choice; the answers come back typed, p_attack 0.82 giving the verdict attack at the 0.5 cut, and category dos with confidence 0.84.</title>
+  <title id="request-title">How Jev IDS works: the flow under test and k labeled examples per category go into one request to jev-1.13.0, whose state holds instructions, columns, categories, examples and flows.under_test, with two questions, is_attack as noul and category as choice; the answers come back typed, p_attack 0.82 giving the verdict attack at the 0.5 cut, and category dos with confidence 0.84.</title>
 
   <defs>
     <style>
@@ -18,7 +18,7 @@
 
   <!-- Column labels -->
   <text class="mono" font-size="16" x="56" y="126" fill="#8E9A93">input</text>
-  <text class="mono" font-size="16" x="472" y="126" fill="#8E9A93">one request to typesafe-ai/jev</text>
+  <text class="mono" font-size="16" x="472" y="126" fill="#8E9A93">one request to jev-1.13.0</text>
   <text class="mono" font-size="16" x="872" y="126" fill="#8E9A93">typed answers</text>
 
   <!-- Input: the flow under test and the labeled examples -->

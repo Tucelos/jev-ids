@@ -37,7 +37,7 @@ The same flows, examples and 0.5 cut go to two baselines: an LLM through an Agno
 git clone https://github.com/jev-ids/jev-ids.git
 cd jev-ids
 uv sync
-# .env: AI_GATEWAY_API_KEY for Jev through the Vercel AI Gateway; DEEPSEEK_API_KEY and CHATGPT_CLIENT_ID only for the LLM baselines.
+# .env: TYPESAFE_API_KEY for Jev; DEEPSEEK_API_KEY and CHATGPT_CLIENT_ID only for the LLM baselines.
 ```
 
 Download [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) into `data/raw/nsl-kdd/` and prepare it once:
@@ -79,7 +79,7 @@ k is the number of labeled examples per category. k = 1 with five categories mea
 | [run.py](jev_ids/run.py)                                         | The loop, cell by cell and flow by flow, and the three files of a run      |
 | [records.py](jev_ids/records.py)                                 | One prediction row and its JSONL                                           |
 | [metrics.py](jev_ids/metrics.py)                                 | F1, novel recall, tokens, cost, latency, and the paired comparison         |
-| [detectors/jev.py](jev_ids/detectors/jev.py)                     | Jev through the Vercel AI Gateway, one flow per request                    |
+| [detectors/jev.py](jev_ids/detectors/jev.py)                     | Jev through TypeSafe's API, one flow per request                           |
 | [detectors/llm.py](jev_ids/detectors/llm.py)                     | The LLM baselines through Agno                                             |
 | [detectors/random_forest.py](jev_ids/detectors/random_forest.py) | The classical baseline                                                     |
 | [prompts/nsl-kdd/](prompts/nsl-kdd)                              | `jev.json`, the whole request template; `llm.md`, the agent's instructions |
@@ -104,9 +104,9 @@ The four multipliers at the top come from the k = 1 rows: 2,410 ms against 504 m
 Limits worth knowing:
 
 - These are pilot numbers, taken to settle the protocol. The reported results will come from the disjoint `paper` split with k up to 16. NF-UQ-NIDS-v2 has a card and a preparation script and no run yet.
-- Latency is the wall clock around the successful HTTP call, measured from the client through the Vercel AI Gateway. The gateway rate-limits often: 1,350 of the 1,800 Jev rows needed at least one retry, and the retries are not in the latency.
+- Latency is the wall clock around the successful HTTP call, measured from the client. The pilot ran through the Vercel AI Gateway, which rate-limited often: 1,350 of the 1,800 Jev rows needed at least one retry, and the retries are not in the latency. The code now calls TypeSafe's API directly.
 - Cost is tokens times list prices, not what was billed. Jev was free under a promotion until 2026-09-25, and GPT-5.6 ran through the ChatGPT Codex backend, priced here at the public API list rate.
-- The gateway masks Jev's version (it reports `typesafe-ai/jev`; TypeSafe direct reports `jev-1.13.0`). The run date in `config.json` is the only pin.
+- The gateway masked Jev's version in the pilot (it reports `typesafe-ai/jev`). Since 2026-09-21 the request names `jev-1.13.0` and every row records the version that answered.
 - Jev's `noul` answer carries no confidence. Only the `choice` answer does.
 
 ## Development
@@ -119,7 +119,7 @@ Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, 
 
 ## Bring your own flows
 
-Jev IDS is an independent research prototype, not a product. Its numbers come from one pilot on NSL-KDD, and it is not affiliated with TypeSafe or Vercel. It can still sit inside a commercial solution, and this is how.
+Jev IDS is an independent research prototype, not a product. Its numbers come from one pilot on NSL-KDD, and it is not affiliated with TypeSafe. It can still sit inside a commercial solution, and this is how.
 
 ### Where Jev fits
 
@@ -130,18 +130,18 @@ A commercial IDS already has sensors, a flow exporter and a signature engine fee
 - **A category for the playbook.** The `choice` answer names the category with a confidence, so the SIEM routes dos, probe, r2l and u2r, or your own taxonomy, to different runbooks with no parser in between.
 - **Coverage from day one.** A new site or tenant has no training set. Jev needs one labeled flow per category, so it covers the segment while a classical model is still collecting data.
 
-Half a second per verdict and a rate-limited gateway make this an asynchronous side channel, fed from the exporter (NetFlow, IPFIX, Zeek `conn.log`) through a queue, never an inline filter.
+Half a second per verdict and a rate-limited API make this an asynchronous side channel, fed from the exporter (NetFlow, IPFIX, Zeek `conn.log`) through a queue, never an inline filter.
 
 ### Six steps
 
-1. **Get a key.** Jev is served through the Vercel AI Gateway; set `AI_GATEWAY_API_KEY` in `.env`. Pricing and terms are TypeSafe's and Vercel's.
+1. **Get a key.** Jev is served by TypeSafe; set `TYPESAFE_API_KEY` in `.env`. Pricing and terms are TypeSafe's.
 2. **Describe your flows.** Write a dataset card like [`data/nsl-kdd/dataset.json`](data/nsl-kdd/dataset.json): the columns your flow exporter emits, in order, which of them are symbolic, your categories and which one is benign.
 3. **Write the request.** Copy [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json), replace `columns` and the category descriptions with yours, and keep the two questions.
 4. **Pick examples.** One labeled flow per category from your own network is enough to start; k = 1 is what the pilot used.
 5. **Call the detector.** `JevDetector(load_prompt(path)).predict(flow, examples)` returns `p_attack`, `category_pred` and `confidence` for one flow in about half a second. Route `p_attack` to your alerting with the cut your alarm budget allows; 0.5 was the benchmark's choice, not a rule.
 6. **Measure before you trust.** Run `jev-ids run` and `jev-ids metrics` on a labeled split of your own flows. The numbers above are NSL-KDD's, not yours.
 
-Only flow features leave your network, never payloads, but they do leave it: every request goes to the gateway.
+Only flow features leave your network, never payloads, but they do leave it: every request goes to TypeSafe's API.
 
 ## Team
 
@@ -167,4 +167,4 @@ Only flow features leave your network, never payloads, but they do leave it: eve
 
 ---
 
-[TypeSafe docs](https://docs.typesafe.ai/introduction) · [Jev on the Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev) · [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) · [Glossary](CONTEXT.md)
+[TypeSafe docs](https://docs.typesafe.ai/introduction) · [Jev models and pricing](https://docs.typesafe.ai/models) · [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) · [Glossary](CONTEXT.md)

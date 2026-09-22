@@ -1,13 +1,20 @@
 {
-  "date": "2026-09-20",
+  "date": "2026-09-21",
   "unit": "USD per 1M tokens",
   "models": {
+    "jev-1.13.0": {
+      "input": 0.042,
+      "cached_input": 0.042,
+      "output": 0.0,
+      "source": "https://docs.typesafe.ai/models",
+      "note": "TypeSafe direct list price: input only, output tokens are free, no cache discount."
+    },
     "typesafe-ai/jev": {
       "input": 0.042,
       "cached_input": 0.042,
       "output": 0.0,
       "source": "https://vercel.com/ai-gateway/models/jev",
-      "note": "List price, no cache discount; billed 0 under the promotion that ends on 2026-09-25."
+      "note": "The runs up to 2026-09-21 went through the Vercel AI Gateway under this id; list price, billed 0 under the promotion that ended on 2026-09-25."
     },
     "deepseek-flash": {
       "input": 0.3,

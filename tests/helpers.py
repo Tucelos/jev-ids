@@ -26,7 +26,7 @@ CATEGORIES = {
 JEV_PROMPT: dict[str, Any] = {
     "text": json.dumps(
         {
-            "model": "typesafe-ai/jev",
+            "model": "jev-1.13.0",
             "state": {
                 "instructions": TASK,
                 "columns": "a,b,c",
