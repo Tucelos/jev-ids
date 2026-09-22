@@ -66,11 +66,13 @@ def test_compare_selects_the_subset_cuts_to_ks_and_prints_csv(tmp_path: Path, ca
     ]
     for prediction in [*a, *b]:
         records.append_prediction(tmp_path / prediction["detector"], prediction)
-    argv = ["compare", str(tmp_path / "jev"), str(tmp_path / "jev")]
+    # Side B is two directories: one per k, as parallel runs write them.
+    records.append_prediction(tmp_path / "jev-k0", make_prediction(0, 1, 0.0, novel_attack=True, k=0))
+    argv = ["compare", "--a", str(tmp_path / "jev"), "--b", str(tmp_path / "jev"), str(tmp_path / "jev-k0")]
     argv += ["--subset", "novel", "--k-a", "1", "--k-b", "all"]
     assert cli.main(argv) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "k_a,k_b,repetition,pairs,discordant,a_correct,b_correct,mcnemar_p,f1_a,f1_b"
     assert lines[1] == "1,,0,1,1,1,0,1.0,1.0,0.0"
     with pytest.raises(SystemExit, match="come together"):
-        cli.main(["compare", "a", "b", "--k-a", "0"])
+        cli.main(["compare", "--a", "a", "--b", "b", "--k-a", "0"])

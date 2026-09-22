@@ -64,9 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
     reporter.add_argument("run_dirs", nargs="+", type=Path, help="results/<run_id> directories")
     reporter.set_defaults(handler=metrics_command)
 
-    comparer = commands.add_parser("compare", help="paired comparison of two runs over the same split")
-    comparer.add_argument("run_a", type=Path, help="results/<run_id> of detector A")
-    comparer.add_argument("run_b", type=Path, help="results/<run_id> of detector B")
+    comparer = commands.add_parser("compare", help="paired comparison of two detectors over the same split")
+    comparer.add_argument("--a", nargs="+", required=True, type=Path, help="results/<run_id> directories of detector A")
+    comparer.add_argument("--b", nargs="+", required=True, type=Path, help="results/<run_id> directories of detector B")
     comparer.add_argument(
         "--subset",
         choices=("all", "novel", "known"),
@@ -101,12 +101,13 @@ def metrics_command(args: argparse.Namespace) -> None:
 
 
 def compare_command(args: argparse.Namespace) -> None:
-    """`compare`: the paired comparison of two runs, optionally across k, as CSV."""
+    """`compare`: the paired comparison of two detectors, optionally across k, as CSV."""
     if (args.k_a is None) != (args.k_b is None):
         raise SystemExit("--k-a and --k-b come together")
     across_k = None if args.k_a is None else (parse_k(args.k_a), parse_k(args.k_b))
-    run_a = metrics.only_subset(read_predictions(args.run_a), args.subset)
-    run_b = metrics.only_subset(read_predictions(args.run_b), args.subset)
+    # A detector may be spread over several run directories (one k each, run in parallel); each side is the union of its rows.
+    run_a = metrics.only_subset([p for run_dir in args.a for p in read_predictions(run_dir)], args.subset)
+    run_b = metrics.only_subset([p for run_dir in args.b for p in read_predictions(run_dir)], args.subset)
     print_csv(metrics.compare(run_a, run_b, across_k))
 
 

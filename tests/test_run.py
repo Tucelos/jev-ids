@@ -159,7 +159,7 @@ def test_build_detector_knows_the_five_names(card: Path) -> None:
 def test_run_dir_name_has_timestamp_dataset_detector_and_split(card: Path) -> None:
     run_dir = run.execute(smoke_spec(card, "llm:deepseek"), FakeDetector(), dataset.load_config(card), FLOWS, TRAIN)
     # The colon of `llm:deepseek` is not a path character, so the name carries it as a dash.
-    assert re.fullmatch(r"\d{8}T\d{6}Z-test-llm-deepseek-smoke", run_dir.name)
+    assert re.fullmatch(r"\d{8}T\d{6}\.\d{6}Z-test-llm-deepseek-smoke", run_dir.name)
 
 
 def test_k_all_is_for_the_forests_only_and_each_forest_has_its_k_guard() -> None:

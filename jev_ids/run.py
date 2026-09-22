@@ -131,9 +131,10 @@ def execute(spec: RunSpec, detector: Detector, config: Config, flows: Sequence[F
     line counting the Flows judged and the rows that came back with an error.
     """
     check_spec(spec, detector.name)
-    # `<UTC timestamp>-<dataset>-<detector>-<split>` names the directory under results/; the colon of `llm:openai` is not a path character.
+    # `<UTC timestamp>-<dataset>-<detector>-<split>` names the directory under results/; the timestamp keeps its microseconds so that runs
+    # launched together (one k each, in parallel) never share a directory, and the colon of `llm:openai` is not a path character.
     started = datetime.now(UTC)
-    run_id = f"{started:%Y%m%dT%H%M%SZ}-{spec.dataset.parent.name}-{spec.detector.replace(':', '-')}-{spec.split}"
+    run_id = f"{started:%Y%m%dT%H%M%S.%fZ}-{spec.dataset.parent.name}-{spec.detector.replace(':', '-')}-{spec.split}"
     run_dir = spec.results_dir / run_id
     # The commit the code was at, with `-dirty` when the working tree had uncommitted changes, so a run can be traced to its exact code;
     # the split file is hashed for the same reason, because the card's hash does not cover the Flows that were judged.

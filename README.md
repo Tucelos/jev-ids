@@ -57,7 +57,7 @@ uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:openai --m
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,16,all
 uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector isolation_forest --split pilot --k all
 uv run jev-ids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
-uv run jev-ids compare results/<jev_run> results/<rf_run> --subset novel --k-a 0 --k-b all
+uv run jev-ids compare --a results/<jev_run> --b results/<rf_run> --subset novel --k-a 0 --k-b all
 ```
 
 k is the number of labeled examples per category. k = 1 with five categories means five examples, and `all` means the whole pool. `metrics` prints one CSV row per detector and k with F1, recall on novel attacks and per category, PR-AUC and ROC-AUC of p_attack, tokens, latency and cost. `compare` pairs two runs flow by flow and runs McNemar's test on the discordant pairs, because only the flows two detectors disagree on tell them apart. Cost is computed offline as tokens times the list prices in [`prices.json`](prices.json), for every detector alike.
