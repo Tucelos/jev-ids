@@ -117,6 +117,32 @@ make check
 
 Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, pyright in strict mode, pytest with coverage, vulture, pip-audit and jscpd. Thresholds live in `pyproject.toml` and `.jscpd.json`. Runs make paid API calls and write only under `results/`.
 
+## Bring your own flows
+
+Jev IDS is an independent research prototype, not a product. Its numbers come from one pilot on NSL-KDD, and it is not affiliated with TypeSafe or Vercel. It can still sit inside a commercial solution, and this is how.
+
+### Where Jev fits
+
+A commercial IDS already has sensors, a flow exporter and a signature engine feeding a SIEM. Jev IDS replaces none of them. It sits beside the pipeline, off the packet path, and judges one flow record at a time:
+
+- **Second opinion on alerts.** Send Jev the flow behind each alert the signature engine raised. `p_attack` ranks the queue, and the SOC reads the top first. In the pilot, Jev raised 24 false alarms on 420 benign flows where a Random Forest raised 362.
+- **A net behind the signatures.** Signatures miss what they have never seen. Sample the flows the engine passed as clean, or every flow to a critical asset, and let Jev judge them: it caught 84% of attacks of a kind absent from its examples.
+- **A category for the playbook.** The `choice` answer names the category with a confidence, so the SIEM routes dos, probe, r2l and u2r, or your own taxonomy, to different runbooks with no parser in between.
+- **Coverage from day one.** A new site or tenant has no training set. Jev needs one labeled flow per category, so it covers the segment while a classical model is still collecting data.
+
+Half a second per verdict and a rate-limited gateway make this an asynchronous side channel, fed from the exporter (NetFlow, IPFIX, Zeek `conn.log`) through a queue, never an inline filter.
+
+### Six steps
+
+1. **Get a key.** Jev is served through the Vercel AI Gateway; set `AI_GATEWAY_API_KEY` in `.env`. Pricing and terms are TypeSafe's and Vercel's.
+2. **Describe your flows.** Write a dataset card like [`data/nsl-kdd/dataset.json`](data/nsl-kdd/dataset.json): the columns your flow exporter emits, in order, which of them are symbolic, your categories and which one is benign.
+3. **Write the request.** Copy [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json), replace `columns` and the category descriptions with yours, and keep the two questions.
+4. **Pick examples.** One labeled flow per category from your own network is enough to start; k = 1 is what the pilot used.
+5. **Call the detector.** `JevDetector(load_prompt(path)).predict(flow, examples)` returns `p_attack`, `category_pred` and `confidence` for one flow in about half a second. Route `p_attack` to your alerting with the cut your alarm budget allows; 0.5 was the benchmark's choice, not a rule.
+6. **Measure before you trust.** Run `jev-ids run` and `jev-ids metrics` on a labeled split of your own flows. The numbers above are NSL-KDD's, not yours.
+
+Only flow features leave your network, never payloads, but they do leave it: every request goes to the gateway.
+
 ## Team
 
 <table align="center">
@@ -138,8 +164,6 @@ Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, 
     </td>
   </tr>
 </table>
-
-Jev IDS is an independent research project and is not affiliated with TypeSafe or Vercel.
 
 ---
 
