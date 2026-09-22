@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     runner = commands.add_parser("run", help="run one detector over one split")
     runner.add_argument("--dataset", required=True, type=Path, help="the card: data/<name>/dataset.json")
-    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:openai, random_forest or isolation_forest")
+    runner.add_argument("--detector", required=True, help="jev, llm:deepseek, llm:openai, llm:gemini, random_forest or isolation_forest")
     runner.add_argument("--split", required=True, help="internal, pilot, smoke, ...")
     runner.add_argument(
         "--k",

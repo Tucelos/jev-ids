@@ -46,6 +46,11 @@ paper-llm: $(addprefix paper-llm-k,$(LLM_KS))
 paper-llm-k%:
 	$(PAPER_RUN) --detector llm:openai --model gpt-5.6-luna --k $*
 
+paper-gemini: $(addprefix paper-gemini-k,$(LLM_KS))
+
+paper-gemini-k%:
+	$(PAPER_RUN) --detector llm:gemini --model gemini-3.6-flash --k $*
+
 paper-random-forest:
 	$(PAPER_RUN) --detector random_forest --k 1,2,4,8,all
 

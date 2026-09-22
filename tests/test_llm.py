@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from agno.metrics import RunMetrics
 from agno.models.deepseek import DeepSeek
+from agno.models.google import Gemini
 from agno.run.agent import RunOutput
 
 from jev_ids.detectors import chatgpt, llm
@@ -141,4 +142,8 @@ def test_make_model_applies_the_determinism_knobs() -> None:
     luna = llm.make_model("openai", "gpt-5.6-luna")
     assert isinstance(luna, chatgpt.ChatGPTSubscriptionModel)
     assert luna.reasoning_effort == "none"
+    gemini = llm.make_model("gemini", "gemini-3.6-flash")
+    assert isinstance(gemini, Gemini)
+    assert (gemini.vertexai, gemini.temperature, gemini.thinking_level) == (True, 0.0, "low")
+    assert llm.LLMDetector(LLM_PROMPT, "gemini").model == "gemini-3.6-flash"
     assert llm.LLMDetector(LLM_PROMPT, "openai").model == "gpt-5.6-luna"

@@ -1,7 +1,8 @@
 """The LLM baselines through an Agno Agent.
 
-Two providers share this detector: DeepSeek through its own API, and an OpenAI GPT-{5,6}.x model through the ChatGPT Codex backend with
-OAuth (see `chatgpt.py`).
+Three providers share this detector: DeepSeek through its own API, an OpenAI GPT-{5,6}.x model through the ChatGPT Codex backend with
+OAuth (see `chatgpt.py`), and Google's Gemini through Vertex AI (the project and region come from `GOOGLE_CLOUD_PROJECT` and
+`GOOGLE_CLOUD_LOCATION`, the credentials from `gcloud auth application-default login`).
 In reading order:
 
 - `Judgement`: the JSON answer every LLM must give (Agno's `output_schema`).
@@ -11,7 +12,7 @@ In reading order:
 - `make_model`: the Agno model of a provider, with its determinism knobs.
 - `measurements`: what one run measured, read off Agno's RunOutput.
 
-Both providers run at the lowest reasoning available. One `Agent.run` per Flow and no retries of our own: a provider error is an error row,
+All providers run at the lowest reasoning available. One `Agent.run` per Flow and no retries of our own: a provider error is an error row,
 and the run goes on.
 """
 
@@ -21,13 +22,14 @@ from typing import Any, Literal
 
 from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
+from agno.models.google import Gemini
 from agno.run.agent import RunOutput
 from pydantic import BaseModel, Field
 
 from jev_ids.dataset import Flow
 from jev_ids.detectors import chatgpt
 
-DEFAULT_MODEL = {"deepseek": "deepseek-flash", "openai": "gpt-5.6-luna"}
+DEFAULT_MODEL = {"deepseek": "deepseek-flash", "openai": "gpt-5.6-luna", "gemini": "gemini-3.6-flash"}
 # Replaces `{examples}` in the prompt file at k > 0; at k = 0 the placeholder is simply removed.
 EXAMPLES_HEADER = "\nLabeled example records (record => category):\n"
 
@@ -51,7 +53,7 @@ class LLMDetector:
 
         Args:
             prompt: `run.load_prompt` of `prompts/<dataset>/llm.md`.
-            provider: `deepseek` or `openai`.
+            provider: `deepseek`, `openai` or `gemini`.
             model_id: the provider's model id; None means the provider default.
         """
         self.template: str = prompt["text"]
@@ -101,10 +103,13 @@ def make_model(provider: str, model_id: str) -> Any:
     """The Agno model of a provider, with its determinism knobs.
 
     DeepSeek thinks by default and then silently ignores `temperature`, so thinking is off and the temperature is 0. GPT-5.x documents no
-    temperature and runs at `reasoning_effort="none"`, the lowest available.
+    temperature and runs at `reasoning_effort="none"`, the lowest available. Gemini 3.x cannot switch thinking off; `thinking_level="low"`
+    is the lowest Agno documents, and the temperature is 0.
     """
     if provider == "deepseek":
         return DeepSeek(id=model_id, temperature=0.0, use_thinking=False)
+    if provider == "gemini":
+        return Gemini(id=model_id, vertexai=True, temperature=0.0, thinking_level="low")
     return chatgpt.ChatGPTSubscriptionModel(id=model_id, reasoning_effort="none")
 
 

@@ -36,6 +36,14 @@
       "output": 12.0,
       "source": "https://developers.openai.com/api/docs/pricing",
       "note": "Public API list price; fallback model if the Codex backend refuses luna on a Free account."
+    },
+    "gemini-3.6-flash": {
+      "input": 0.75,
+      "cached_input": 0.075,
+      "output": 3.75,
+      "reasoning_outside_output": true,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing",
+      "note": "Paid-tier list price through 2026-12-31, read 2026-09-22 (doubles to 1.50 / 0.15 / 7.50 from 2027-01-01); Vertex reports thinking tokens apart from output_tokens and bills them as output; the per-hour cache storage fee is not modeled."
     }
   }
 }

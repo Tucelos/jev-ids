@@ -44,7 +44,7 @@ class RunSpec:
     """Everything the CLI resolved for one run; a parameter bundle, nothing more.
 
     Attributes:
-        detector: `jev`, `llm:deepseek`, `llm:openai`, `random_forest` or `isolation_forest`.
+        detector: `jev`, `llm:deepseek`, `llm:openai`, `llm:gemini`, `random_forest` or `isolation_forest`.
         dataset: the card of the dataset, `data/<name>/dataset.json`.
         split: the split to judge, a file under `data/<name>/splits/`.
         k_values: Examples per Category to try; None means the whole pool (the forests).
@@ -79,7 +79,7 @@ def build_detector(spec: RunSpec, config: Config) -> Detector:
     prompts = ROOT / "prompts" / config["name"]
     if spec.detector == "jev":
         return JevDetector(load_prompt(prompts / "jev.json"))
-    if spec.detector in ("llm:deepseek", "llm:openai"):
+    if spec.detector in ("llm:deepseek", "llm:openai", "llm:gemini"):
         provider = spec.detector.removeprefix("llm:")
         return LLMDetector(load_prompt(prompts / "llm.md"), provider, spec.model_id)
     if spec.detector in ("random_forest", "isolation_forest"):

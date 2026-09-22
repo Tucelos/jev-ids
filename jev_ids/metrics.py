@@ -110,16 +110,21 @@ def scores(rows: Sequence[Prediction]) -> dict[str, float | None]:
 
 
 def cost_usd_per_1m(row: Prediction, prices: dict[str, Any]) -> float | None:
-    """List cost in USD of 1M calls like this row: tokens × the per-1M-token prices."""
+    """List cost in USD of 1M calls like this row: tokens × the per-1M-token prices.
+
+    OpenAI and DeepSeek count reasoning inside `output_tokens`; Gemini reports it apart in `reasoning_tokens` and bills it as output, so a
+    price entry with `reasoning_outside_output` adds those tokens at the output rate.
+    """
     tokens: dict[str, Any] = row.get("usage", {})
-    price: dict[str, float] | None = prices.get(row.get("model", ""))
+    price: dict[str, Any] | None = prices.get(row.get("model", ""))
     if price is None or "input_tokens" not in tokens:
         return None
     cached = tokens.get("cache_read_tokens", 0)  # part of the input, at its own rate
+    reasoning = tokens.get("reasoning_tokens", 0) if price.get("reasoning_outside_output") else 0
     return (
         (tokens["input_tokens"] - cached) * price["input"]
         + cached * price["cached_input"]
-        + tokens.get("output_tokens", 0) * price["output"]
+        + (tokens.get("output_tokens", 0) + reasoning) * price["output"]
     )
 
 

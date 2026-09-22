@@ -13,7 +13,8 @@ from tests.helpers import make_prediction
 # The `models` entries of prices.json used below.
 DEEPSEEK = {"input": 0.30, "cached_input": 0.006, "output": 1.20}
 JEV = {"input": 0.042, "cached_input": 0.042, "output": 0.0}
-PRICES = {"deepseek-flash": DEEPSEEK, "jev-1.13.0": JEV}
+GEMINI = {"input": 0.75, "cached_input": 0.075, "output": 3.75, "reasoning_outside_output": True}
+PRICES = {"deepseek-flash": DEEPSEEK, "jev-1.13.0": JEV, "gemini-3.6-flash": GEMINI}
 
 
 def make(  # noqa: PLR0913
@@ -105,6 +106,12 @@ def test_cost_usd_per_1m_prices_the_usage_at_list_price() -> None:
     cached = make_prediction(2, 1, 0.9, model="deepseek-flash")
     cached["usage"] = {"input_tokens": 1000, "cache_read_tokens": 800, "output_tokens": 20}
     expected = 200 * 0.30 + 800 * 0.006 + 20 * 1.20
+    assert metrics.cost_usd_per_1m(cached, PRICES) == pytest.approx(expected)
+    # Gemini reports reasoning apart from output_tokens and bills it as output; the other providers already count it inside.
+    thinking = make_prediction(4, 1, 0.9, model="gemini-3.6-flash")
+    thinking["usage"] = {"input_tokens": 800, "output_tokens": 18, "reasoning_tokens": 109}
+    assert metrics.cost_usd_per_1m(thinking, PRICES) == pytest.approx(800 * 0.75 + (18 + 109) * 3.75)
+    cached["usage"]["reasoning_tokens"] = 500  # DeepSeek: already inside output_tokens, so nothing changes
     assert metrics.cost_usd_per_1m(cached, PRICES) == pytest.approx(expected)
     # No usage (the Random Forest, or an error row) or no list price: no cost.
     assert metrics.cost_usd_per_1m({"model": "deepseek-flash"}, PRICES) is None
