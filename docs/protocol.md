@@ -35,8 +35,7 @@ repetition) and, for the API detectors, `responses.jsonl` (raw answers, not in g
 | Target                                                                                                 | Detector                                             | k               | Seeds   | Rows   |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- | --------------- | ------- | ------ |
 | `paper-jev`                                                                                            | `jev`, `jev-1.13.0` through the TypeSafe SDK         | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
-| `paper-llm` (`paper-llm-k0` … `paper-llm-k8`, one run directory per k, run in parallel with `make -j`) | `llm:openai`, `gpt-5.6-luna` through Agno            | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
-| `paper-gemini` (`paper-gemini-k0` … `paper-gemini-k8`, same shape)                                    | `llm:gemini`, `gemini-3.6-flash` through Agno and Vertex AI | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
+| `paper-llm` (`paper-llm-k0` … `paper-llm-k8`, one run directory per k, run in parallel with `make -j`) | `llm:$(LLM)`, `$(LLM_MODEL)` through Agno: `gemini`, `gemini-3.6-flash` on Vertex AI by default; `LLM=openai LLM_MODEL=gpt-5.6-luna` for GPT | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
 | `paper-random-forest`                                                                                  | `random_forest`, fitted on the examples of each cell | 1, 2, 4, 8, all | 0, 1, 2 | 30,000 |
 | `paper-isolation-forest`                                                                               | `isolation_forest`, fitted on the benign pool        | all             | 0, 1, 2 | 6,000  |
 

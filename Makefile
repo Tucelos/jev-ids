@@ -34,6 +34,9 @@ check-dup:
 # `metrics` and `compare --b` take the five directories together. k stops at 8 since 2026-09-22 (docs/protocol.md).
 PAPER_RUN = uv run jev-ids run --dataset data/nsl-kdd/dataset.json --split paper --results-dir results/paper --seeds 0,1,2
 LLM_KS = 0 1 2 4 8
+# The LLM baseline of the paper: override with `make paper-llm LLM=openai LLM_MODEL=gpt-5.6-luna`.
+LLM ?= gemini
+LLM_MODEL ?= gemini-3.6-flash
 .PHONY: paper paper-jev paper-llm paper-random-forest paper-isolation-forest paper-summary
 
 paper: paper-jev paper-llm paper-random-forest paper-isolation-forest paper-summary
@@ -44,12 +47,7 @@ paper-jev:
 paper-llm: $(addprefix paper-llm-k,$(LLM_KS))
 
 paper-llm-k%:
-	$(PAPER_RUN) --detector llm:openai --model gpt-5.6-luna --k $*
-
-paper-gemini: $(addprefix paper-gemini-k,$(LLM_KS))
-
-paper-gemini-k%:
-	$(PAPER_RUN) --detector llm:gemini --model gemini-3.6-flash --k $*
+	$(PAPER_RUN) --detector llm:$(LLM) --model $(LLM_MODEL) --k $*
 
 paper-random-forest:
 	$(PAPER_RUN) --detector random_forest --k 1,2,4,8,all
