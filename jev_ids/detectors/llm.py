@@ -104,12 +104,13 @@ def make_model(provider: str, model_id: str) -> Any:
 
     DeepSeek thinks by default and then silently ignores `temperature`, so thinking is off and the temperature is 0. GPT-5.x documents no
     temperature and runs at `reasoning_effort="none"`, the lowest available. Gemini 3.x cannot switch thinking off; `thinking_level="low"`
-    is the lowest Agno documents, and the temperature is 0.
+    is the lowest Agno documents, and the temperature is 0. Its client has no request timeout of its own, and Vertex has held a
+    connection open for minutes, freezing the run; two minutes turns such a hang into an error row that `redo-errors` repairs.
     """
     if provider == "deepseek":
         return DeepSeek(id=model_id, temperature=0.0, use_thinking=False)
     if provider == "gemini":
-        return Gemini(id=model_id, vertexai=True, temperature=0.0, thinking_level="low")
+        return Gemini(id=model_id, vertexai=True, temperature=0.0, thinking_level="low", timeout=120)
     return chatgpt.ChatGPTSubscriptionModel(id=model_id, reasoning_effort="none")
 
 

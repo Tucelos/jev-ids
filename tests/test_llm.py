@@ -144,6 +144,6 @@ def test_make_model_applies_the_determinism_knobs() -> None:
     assert luna.reasoning_effort == "none"
     gemini = llm.make_model("gemini", "gemini-3.6-flash")
     assert isinstance(gemini, Gemini)
-    assert (gemini.vertexai, gemini.temperature, gemini.thinking_level) == (True, 0.0, "low")
+    assert (gemini.vertexai, gemini.temperature, gemini.thinking_level, gemini.timeout) == (True, 0.0, "low", 120)
     assert llm.LLMDetector(LLM_PROMPT, "gemini").model == "gemini-3.6-flash"
     assert llm.LLMDetector(LLM_PROMPT, "openai").model == "gpt-5.6-luna"
