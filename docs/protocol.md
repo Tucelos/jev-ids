@@ -35,12 +35,12 @@ repetition) and, for the API detectors, `responses.jsonl` (raw answers, not in g
 A quota error or a timeout is a row with `error`, not a crash. `uv run jev-ids redo-errors results/paper/<run>` judges those flows again
 in place, in their own cells and with the same examples, and notes the pass under `redone` in `config.json`.
 
-| Target                                                                                                 | Detector                                             | k               | Seeds   | Rows   |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- | --------------- | ------- | ------ |
-| `paper-jev`                                                                                            | `jev`, `jev-1.13.0` through the TypeSafe SDK         | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
+| Target                                                                                                 | Detector                                                                                                                                     | k               | Seeds   | Rows   |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------- | ------ |
+| `paper-jev`                                                                                            | `jev`, `jev-1.13.0` through the TypeSafe SDK                                                                                                 | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
 | `paper-llm` (`paper-llm-k0` … `paper-llm-k8`, one run directory per k, run in parallel with `make -j`) | `llm:$(LLM)`, `$(LLM_MODEL)` through Agno: `gemini`, `gemini-3.6-flash` on Vertex AI by default; `LLM=openai LLM_MODEL=gpt-5.6-luna` for GPT | 0, 1, 2, 4, 8   | 0, 1, 2 | 30,000 |
-| `paper-random-forest`                                                                                  | `random_forest`, fitted on the examples of each cell | 1, 2, 4, 8, all | 0, 1, 2 | 30,000 |
-| `paper-isolation-forest`                                                                               | `isolation_forest`, fitted on the benign pool        | all             | 0, 1, 2 | 6,000  |
+| `paper-random-forest`                                                                                  | `random_forest`, fitted on the examples of each cell                                                                                         | 1, 2, 4, 8, all | 0, 1, 2 | 30,000 |
+| `paper-isolation-forest`                                                                               | `isolation_forest`, fitted on the benign pool                                                                                                | all             | 0, 1, 2 | 6,000  |
 
 k stops at 8: on 2026-09-22 the Jev run lost its k = 16 cells when the TypeSafe credits ran out, and the protocol was cut to k <= 8
 for every detector instead of buying the cells back (`trimmed` in the two `config.json`). k = all means the whole pool; at k = all the seed changes nothing, and the three seeds are kept so that `compare` can pair the rows with
