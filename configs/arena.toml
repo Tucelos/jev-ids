@@ -20,7 +20,9 @@ k = 1         # Examples per Category when the Context chooses none of its own
 
 [attacker]
 # Who mutates the attack Flows, and how hard. These two numbers are the biggest line of the budget below.
-kind = "mimicry"           # "mimicry" moves a Flow toward benign traffic, "llm" asks a model for the next mutation
+# "mimicry" is the only kind there is: it copies a real benign Flow's derived block onto the attack. An LLM attacker was specified and
+# not built (docs/arena/tarefas.md), so `kind` refuses anything else at load time rather than halfway into a Run.
+kind = "mimicry"
 flows_per_round = 20       # attack Flows attacked in one Round
 max_queries_per_flow = 30  # Detector calls the attacker may spend on one Flow before giving up on it
 observes = "verdict"       # what the attacker is told back: "verdict" alone or the whole "p_attack"

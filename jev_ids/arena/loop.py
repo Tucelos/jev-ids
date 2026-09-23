@@ -862,6 +862,10 @@ def play_round(arena: Arena, state: SeedState, round_index: int) -> bool:
 
 def play_seed(arena: Arena, seed: int) -> bool:
     """Every Round of one seed's lineage, from the baseline Context; whether the Run may go on."""
+    # The induced-failure stream is reseeded here rather than once for the whole Run, so a seed's failures are its own: a Run of seeds 0
+    # and 1 must give seed 1 the very calls a Run of seed 1 alone would have failed, or A3's arms cannot be read seed by seed. The rate
+    # stays in the key so that fail-open and fail-closed, at one rate and one seed, fail on exactly the same calls.
+    arena.failures.seed(f"{arena.config.threats.failure_rate}:{seed}:failures")
     state = SeedState(
         seed=seed,
         context=baseline_context(),

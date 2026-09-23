@@ -81,6 +81,19 @@ creating the Run directory, because an experiment that dies in Round 7 is worth 
 
 The final measurement on `paper` is a separate command with its own budget: 2,000 Flows x seeds x (baseline Context, final Context).
 
+## Two behaviours the implementation has that this document did not say
+
+Both were found by reading the finished code against this file, and both change how a record is read.
+
+- **The attacker's probes leave no Prediction.** Only the Round's traffic and the gate's two sides are written to
+  `predictions.jsonl`; the attacker's search is booked against the Budget and summarised in `attack.queries`, but writing a row per probe
+  would multiply the `row_id`s the gate pairs on. So cost and latency computed from `predictions.jsonl` understate the real spend by
+  roughly a third at the defaults. **The Budget snapshot is the truth**, and the tables say so.
+- **Under `on_failure = "closed"` the upstream error rate reads zero.** A failed call is recorded as an alert, so
+  `metrics.scores`'s count of Predictions without a Verdict finds none. The gate works around it by counting the `error` field instead,
+  which is why `gate.integrity` still fires in that arm; `report.py`'s `error_rate` column does not, and a fail-closed Run's column
+  should be read as "rows with no Verdict", not "calls that failed".
+
 ## What a Round writes
 
 One directory per Run under `results/arena/`, carrying `config.json` (the resolved config, the Card, Split and prompt hashes, the code

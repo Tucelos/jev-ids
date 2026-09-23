@@ -111,7 +111,10 @@ def test_a_number_that_cannot_mean_anything_raises(tmp_path: Path, table: str, m
     ("table", "message"),
     [
         ("[detector]\nname = 'random_forest'\n", "detector.name = 'random_forest': one of jev, offline"),
-        ("[attacker]\nkind = 'gradient'\n", "attacker.kind = 'gradient': one of llm, mimicry"),
+        ("[attacker]\nkind = 'gradient'\n", "attacker.kind = 'gradient': one of mimicry"),
+        # `llm` names a class `arena.attacker` does not ship. Accepting it here would let a Run build its directory and its donors
+        # before raising NotImplementedError, so it is refused with every other kind the Arena cannot build.
+        ("[attacker]\nkind = 'llm'\n", "attacker.kind = 'llm': one of mimicry"),
         ("[attacker]\nobserves = 'category'\n", "attacker.observes = 'category': one of p_attack, verdict"),
         ("[curator]\nkind = 'human'\n", "curator.kind = 'human': one of heuristic, llm"),
         ("[gate]\nmode = 'open'\n", "gate.mode = 'open': one of guarded, none"),

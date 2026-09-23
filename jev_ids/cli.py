@@ -1,11 +1,11 @@
-"""The command line: `jev-ids run|metrics|compare|arena|arena-eval`, also reachable as `python -m jev_ids`.
+"""The command line: `jev-ids run|metrics|compare|arena|arena-eval|arena-report`, also reachable as `python -m jev_ids`.
 
 In reading order:
 
 - `parse_k` and `parse_list`: the list arguments (`--k 0,1,all`).
-- `build_parser`: the six subcommands and their arguments.
-- `run_command`, `metrics_command`, `compare_command`, `arena_command`, `eval_command`: one handler per subcommand, each turning the
-  parsed arguments into calls of `run`, `metrics`, `arena.loop` or `arena.final`.
+- `build_parser`: the seven subcommands and their arguments.
+- `run_command`, `metrics_command`, `compare_command`, `arena_command`, `eval_command`, `arena_report_command`: one handler per
+  subcommand, each turning the parsed arguments into calls of `run`, `metrics`, `arena.loop`, `arena.final` or `arena.report`.
 - `print_csv`: a table as CSV on stdout.
 - `main`: parse, dispatch, return the exit code.
 
@@ -25,7 +25,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from jev_ids import ROOT, metrics, run
-from jev_ids.arena import final, loop
+from jev_ids.arena import final, loop, report
 from jev_ids.arena.config import ARENA_CONFIG, ArenaConfig, check_choices, check_ranges, load_arena_config
 from jev_ids.records import read_predictions
 
@@ -45,7 +45,7 @@ def parse_list(text: str) -> tuple[int | None, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The six subcommands; each one carries the function that handles it."""
+    """The seven subcommands; each one carries the function that handles it."""
     parser = argparse.ArgumentParser(prog="jev-ids")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -106,6 +106,16 @@ def build_parser() -> argparse.ArgumentParser:
     evaluator.add_argument("--results-dir", type=Path, default=final.EVAL_RESULTS, help="where the evaluation directory is created")
     evaluator.add_argument("--report", type=Path, help="print the table of a finished evaluation instead of running one")
     evaluator.set_defaults(handler=eval_command)
+
+    tables = commands.add_parser("arena-report", help="the tables of one or more arena runs: per round, per run, or arm against arm")
+    tables.add_argument("run_dirs", nargs="+", type=Path, help="results/arena/<run_id> directories")
+    tables.add_argument(
+        "--grain",
+        choices=("rounds", "run", "compare"),
+        default="rounds",
+        help="one row per round, one per seed, or one per run and seed against the first directory given",
+    )
+    tables.set_defaults(handler=arena_report_command)
     return parser
 
 
@@ -189,6 +199,19 @@ def eval_command(args: argparse.Namespace) -> None:
         print(json.dumps(final.preflight(args.run_dir).to_dict(), indent=2))
         return
     print_csv(final.summarize_eval(final.run_final(args.run_dir, results_dir=args.results_dir)))
+
+
+def arena_report_command(args: argparse.Namespace) -> None:
+    """`arena-report`: a finished Run's tables at the grain asked for, as CSV.
+
+    `compare` puts arms side by side and refuses Runs that are not comparable, naming the facet that differs; it takes the first
+    directory as the reference. The other two grains read one Run each, so they take the first directory given.
+    """
+    if args.grain == "compare":
+        print_csv(report.compare_runs(args.run_dirs))
+        return
+    summarize = report.summarize_rounds if args.grain == "rounds" else report.summarize_run
+    print_csv([row for run_dir in args.run_dirs for row in summarize(run_dir)])
 
 
 def print_csv(rows: Sequence[dict[str, Any]]) -> None:

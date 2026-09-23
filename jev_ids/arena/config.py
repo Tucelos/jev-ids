@@ -266,7 +266,9 @@ def check_choices(config: ArenaConfig) -> None:
     """Refuse a field that names something the Arena cannot build; a misspelled kind is a typo like any other."""
     choices = {
         "detector.name": (config.detector.name, ("jev", "offline")),
-        "attacker.kind": (config.attacker.kind, ("llm", "mimicry")),
+        # `llm` is deliberately absent: `arena.attacker` ships no LLMAttacker, and accepting the name here would let a Run build its
+        # directory and its donors before raising NotImplementedError. A kind that cannot be built is a typo, and typos fail at load.
+        "attacker.kind": (config.attacker.kind, ("mimicry",)),
         "attacker.observes": (config.attacker.observes, ("p_attack", "verdict")),
         "curator.kind": (config.curator.kind, ("heuristic", "llm")),
         "gate.mode": (config.gate.mode, ("guarded", "none")),
