@@ -709,6 +709,13 @@ flowchart TD
 > detector a ignorar justamente o padrão do ataque, com efeito persistente de rodada em rodada** sobre
 > **a integridade do Contexto e, por consequência, sobre o recall**.
 
+**A2 não é uma invenção deste grupo: é técnica catalogada.** O MITRE ATLAS a registra como
+**AML.T0080 — AI Agent Context Poisoning**, com as subtécnicas **.000 Memory** e **.001 Thread**; e
+**AML.T0020 — Training Data Poisoning**, da tática *Persistence*, descreve explicitamente alterar
+rótulos ou anotações e manipular processos de feedback e coleta de dados — que é literalmente o que a
+função `poison()` do analista faz. No OWASP Top 10 for LLM Applications 2025, a categoria correspondente
+é **LLM04:2025 Data and Model Poisoning**.
+
 > **A3 — Falha sob volume, com *fail-open*.** Um **atacante capaz de gerar volume ou de provocar
 > congestionamento no provedor** pode **fazer chamadas ao detector falharem (timeout, 429, 5xx)** por
 > meio da **interface síncrona com a API do detector sob `threats.on_failure = "open"` (PE3)**,
@@ -871,7 +878,13 @@ detectores, a comparação pareada com teste de McNemar, e o *split* `paper` int
    é sobre isso que o teste de generalização do portão se sustenta.
 3. **Um curador como agente de LLM**, que reescreve o Contexto do detector entre rodadas dentro de uma
    fronteira estrita — *playbook* e exemplos, nada mais —, com uma linha de base heurística sem LLM para
-   que "o raciocínio comprou alguma coisa" seja uma afirmação testável.
+   que "o raciocínio comprou alguma coisa" seja uma afirmação testável. A ideia de evoluir um contexto
+   por **deltas incrementais**, em vez de reescrevê-lo inteiro a cada volta, e o **colapso de contexto**
+   que a reescrita repetida provoca vêm de Zhang et al. (ICLR 2026), cujos três papéis são Generator,
+   Reflector e **Curator** — o mesmo nome que este projeto deu ao componente, por convergência
+   independente, e a razão pela qual o nosso curador edita regras por `id` sob um teto de 15 em vez de
+   reescrever o *playbook*. O que este trabalho acrescenta àquela ideia é o que falta a ela: um
+   **adversário que reage** à evolução do contexto, em vez de uma tarefa parada esperando ser melhorada.
 4. **Um analista simulado com orçamento de rótulos**, que é ao mesmo tempo o canal de aprendizado do
    defensor e a superfície da ameaça A2.
 5. **Um portão de aceitação com teste de generalização**, que recusa Contextos que perdem recall ou
