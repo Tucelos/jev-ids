@@ -60,14 +60,16 @@ max_error_rate = 0.05      # the share of failed calls a proposal may have; chec
 # The hard caps, enforced by `jev_ids/arena/budget.py`. An experiment that runs out of provider credits mid-Round is lost
 # (docs/protocol.md, "k stops at 8"), so the defaults above are chosen to fit under this one.
 #
-# Detector calls of a default Run, worst case:
-#   attacker, per seed per Round : flows_per_round x max_queries_per_flow = 20 x 30 =   600
-#   gate,     per seed per Round : |gate_split|   x proposals_per_round   = 250 x 2 =   500
-#                                                                          per Round = 1,100
-#   x rounds (10) x len(seeds) (1)                                                   = 11,000
-# That leaves headroom under the cap. Raising any of the five numbers in that sum raises the total by the same arithmetic: the reported
-# three-seed protocol costs 33,000 and needs `max_detector_calls` raised to match, or the Run stops partway through the second seed.
-max_detector_calls = 20000  # the attacker's probes and the gate's scoring together
+# Detector calls of a default Run, worst case. Three terms, not two: an earlier version of this comment left out the Round's own traffic
+# and the incumbent's side of the gate, and under-counted by 8,000. `loop.project` is the authority and refuses a Run that cannot finish.
+#   attacker, per seed per Round : flows_per_round x max_queries_per_flow      = 20 x 30 =   600
+#   traffic,  per seed per Round : |learn_split|, judged under the Context     =     550 =   550
+#   gate,     per seed per Round : |gate_split| x (proposals_per_round + 1)    = 250 x 3 =   750
+#                                                                              per Round = 1,900
+#   x rounds (10) x len(seeds) (1)                                                       = 19,000
+# It fits, with little room. Raising any number in that sum raises the total by the same arithmetic: the reported three-seed protocol
+# costs 57,000 and needs `max_detector_calls` raised to match, or the Run is refused before it writes anything.
+max_detector_calls = 20000  # the attacker's probes, the Round's traffic and the gate's scoring together
 max_curator_calls = 200
 
 [threats]

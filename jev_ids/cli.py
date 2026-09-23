@@ -1,27 +1,32 @@
-"""The command line: `jev-ids run|metrics|compare`, also reachable as `python -m jev_ids`.
+"""The command line: `jev-ids run|metrics|compare|arena`, also reachable as `python -m jev_ids`.
 
 In reading order:
 
 - `parse_k` and `parse_list`: the list arguments (`--k 0,1,all`).
-- `build_parser`: the three subcommands and their arguments.
-- `run_command`, `metrics_command`, `compare_command`: one handler per subcommand, each turning the parsed arguments into calls of `run` or
-  `metrics`.
+- `build_parser`: the five subcommands and their arguments.
+- `run_command`, `metrics_command`, `compare_command`, `arena_command`: one handler per subcommand, each turning the parsed arguments into
+  calls of `run`, `metrics` or `arena.loop`.
 - `print_csv`: a table as CSV on stdout.
 - `main`: parse, dispatch, return the exit code.
 
-Nothing here knows how a Detector or a metric works, and no dataset is named here: `run` takes the card of the dataset as `--dataset`.
+Nothing here knows how a Detector or a metric works, and no dataset is named here: `run` takes the card of the dataset as `--dataset` and
+`arena` takes every knob it has as a TOML file.
 """
 
 import argparse
 import csv
+import json
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 
 from jev_ids import ROOT, metrics, run
+from jev_ids.arena import loop
+from jev_ids.arena.config import ARENA_CONFIG, ArenaConfig, check_choices, check_ranges, load_arena_config
 from jev_ids.records import read_predictions
 
 
@@ -40,7 +45,7 @@ def parse_list(text: str) -> tuple[int | None, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The four subcommands; each one carries the function that handles it."""
+    """The five subcommands; each one carries the function that handles it."""
     parser = argparse.ArgumentParser(prog="jev-ids")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -84,6 +89,14 @@ def build_parser() -> argparse.ArgumentParser:
     comparer.add_argument("--k-a", help="cut run A to this k or `all`")
     comparer.add_argument("--k-b", help="cut run B to this k or `all`")
     comparer.set_defaults(handler=compare_command)
+
+    arena = commands.add_parser("arena", help="play the adversarial loop: attacker, analyst, curator and gate, round after round")
+    arena.add_argument("--config", type=Path, default=ARENA_CONFIG, help="the arena's TOML file: configs/arena.toml")
+    arena.add_argument("--rounds", type=int, help="override [arena] rounds")
+    arena.add_argument("--seeds", type=parse_list, help="override [arena] seeds, comma separated")
+    arena.add_argument("--detector", help="override [detector] name: jev or offline")
+    arena.add_argument("--dry-run", action="store_true", help="print the pre-flight projection and stop, without a single call")
+    arena.set_defaults(handler=arena_command)
     return parser
 
 
@@ -122,6 +135,35 @@ def compare_command(args: argparse.Namespace) -> None:
     run_a = metrics.only_subset([p for run_dir in args.a for p in read_predictions(run_dir)], args.subset)
     run_b = metrics.only_subset([p for run_dir in args.b for p in read_predictions(run_dir)], args.subset)
     print_csv(metrics.compare(run_a, run_b, across_k))
+
+
+def overridden(config: ArenaConfig, args: argparse.Namespace) -> ArenaConfig:
+    """The TOML config with the flags that were given applied on top of it.
+
+    A flag that was not given changes nothing, so the file stays the single statement of what a Run was: the three overrides exist for the
+    three things a reader changes while debugging a Run, and each of them lands in that Run's own `config.json`.
+    """
+    arena = config.arena
+    if args.rounds is not None:
+        arena = replace(arena, rounds=args.rounds)
+    if args.seeds is not None:
+        arena = replace(arena, seeds=tuple(seed for seed in args.seeds if seed is not None))
+    detector = config.detector if args.detector is None else replace(config.detector, name=args.detector)
+    overrides = replace(config, arena=arena, detector=detector)
+    # The file was checked when it was loaded; a flag can break it just as well, and a misspelled `--detector` that silently ran the other
+    # one would be the worst kind of typo: the Run would finish, look healthy and answer a question nobody asked.
+    check_ranges(overrides)
+    check_choices(overrides)
+    return overrides
+
+
+def arena_command(args: argparse.Namespace) -> None:
+    """`arena`: the adversarial loop, or with `--dry-run` only the pre-flight projection of what it would spend."""
+    config = overridden(load_arena_config(args.config), args)
+    if args.dry_run:
+        print(json.dumps(loop.preflight(config).to_dict(), indent=2))
+        return
+    loop.run_arena(config)
 
 
 def print_csv(rows: Sequence[dict[str, Any]]) -> None:
