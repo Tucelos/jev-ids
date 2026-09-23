@@ -1,0 +1,34 @@
+%% Diagrama de superficie de ataque - Trabalho 1, secao 4
+%% PE1..PE5 sao os pontos de exploracao descritos na secao 4.1 do relatorio.
+%% Fonte editavel em Mermaid. Renderize com https://mermaid.live ou com a extensao Markdown do editor.
+
+flowchart TD
+    subgraph BORDA["Borda: o que o adversario alcanca"]
+        COMP["Comportamento do atacante<br/>intervalo, hosts, servicos, bytes, latencia"]
+        SEN["Sensor: recomputa 19 features derivadas"]
+    end
+
+    subgraph NUCLEO["Nucleo de deteccao"]
+        API["Chamada HTTP ao detector"]
+        DET["Detector Jev<br/>corte fixo em 0.5"]
+    end
+
+    subgraph APRENDE["Canal de aprendizado entre rodadas"]
+        ANA["Analista<br/>50 alertas + 10% do silencio"]
+        FB["Feedback projetado<br/>sem a Category real"]
+        CUR["Curador LLM<br/>playbook ate 15 regras"]
+        GAT["Portao<br/>recall 0.0 / falso alarme +2 p.p."]
+    end
+
+    COMP --> SEN --> API --> DET
+    DET --> ANA --> FB --> CUR --> GAT
+    GAT -->|"contexto em vigor"| DET
+
+    PE1(["PE1 mutacao comportamental"]) -.-> COMP
+    PE2(["PE2 canal de rotulagem"]) -.-> ANA
+    PE3(["PE3 falha da chamada sob fail-open"]) -.-> API
+    PE4(["PE4 folga de falso alarme do portao"]) -.-> GAT
+    PE5(["PE5 texto livre gravado no estado"]) -.-> CUR
+
+    classDef ponto fill:#fde2e2,stroke:#b3261e,color:#3c0a08;
+    class PE1,PE2,PE3,PE4,PE5 ponto;

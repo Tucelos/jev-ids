@@ -1,0 +1,24 @@
+%% Diagrama de contexto - Trabalho 1, secao 1
+%% Uma interacao: um fluxo de tentativa de login remoto recebe um veredito.
+%% Fonte editavel em Mermaid. Renderize com https://mermaid.live ou com a extensao Markdown do editor.
+
+flowchart LR
+    ATK["Atacante r2l<br/>escolhe comportamento"]
+    LEG["Trafego benigno<br/>usuarios legitimos"]
+    SEN["Sensor<br/>deriva as 41 features"]
+    DET["Detector Jev<br/>veredito em p_attack >= 0.5"]
+    CTX[("Contexto em vigor<br/>playbook + exemplos")]
+    ANA["Analista simulado<br/>orcamento de rotulos"]
+    CUR["Curador LLM<br/>reescreve o contexto"]
+    GAT{"Portao de aceitacao<br/>recall e falso alarme"}
+
+    ATK -->|"conexoes"| SEN
+    LEG -->|"conexoes"| SEN
+    SEN -->|"um fluxo por requisicao"| DET
+    CTX -.->|"estado da requisicao"| DET
+    DET -->|"veredito, unica realimentacao"| ATK
+    DET -->|"falso alarme"| LEG
+    DET -->|"fila de alertas + amostra do silencio"| ANA
+    ANA -->|"rotulos, com atraso de 1 rodada"| CUR
+    CUR -->|"2 propostas de contexto"| GAT
+    GAT -->|"proposta aceita"| CTX

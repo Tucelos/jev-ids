@@ -1,0 +1,21 @@
+%% Diagrama do ciclo adaptativo - Trabalho 1, secao 3
+%% O ciclo acao -> resposta -> observacao -> adaptacao, e as quatro rodadas da tabela da secao 3.1.
+%% Fonte editavel em Mermaid. Renderize com https://mermaid.live ou com a extensao Markdown do editor.
+
+flowchart TB
+    subgraph CICLO["O ciclo de uma rodada"]
+        direction LR
+        AC["Acao<br/>atacante ajusta o comportamento"] --> RE["Resposta<br/>detector julga sob o contexto"]
+        RE --> OB["Observacao<br/>veredito ao atacante,<br/>rotulos ao curador"]
+        OB --> AD["Adaptacao<br/>curador propoe, portao decide"]
+        AD --> AC
+    end
+
+    R1["<b>R1</b> atrasa as conexoes<br/>count e srv_count caem<br/><i>evade sob o contexto v0</i>"]
+    R2["<b>R2</b> regra sobre o bloco dst_host_*<br/>o atacante repete o padrao<br/><i>e pego</i>"]
+    R3["<b>R3</b> dispersa por hosts e servicos<br/>dst_host_count por alvo cai<br/><i>a regra de R2 nao dispara</i>"]
+    R4["<b>R4</b> regra ampla custaria<br/>mais de 2 p.p. de falso alarme<br/><i>o portao recusa; o titular fica</i>"]
+
+    CICLO -.->|"repetido por rodada"| R1
+    R1 --> R2 --> R3 --> R4
+    R4 -.->|"sem equilibrio puro:<br/>o ciclo nao termina sozinho"| R1
