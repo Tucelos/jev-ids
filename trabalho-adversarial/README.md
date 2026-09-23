@@ -21,9 +21,9 @@ sobre o conjunto de dados, nunca de execuções do laço.
 **Como ler.** Os números de configuração vêm de [`configs/arena.toml`](../configs/arena.toml); os
 tamanhos e a composição dos conjuntos, de
 [`data/nsl-kdd/splits/SOURCE.json`](../data/nsl-kdd/splits/SOURCE.json); o protocolo, de
-[`dev-docs/arena-loop-design.md`](../dev-docs/arena-loop-design.md); os fatos sobre as features e a
-literatura, de [`dev-docs/research-evasion-constraints.md`](../dev-docs/research-evasion-constraints.md)
-e [`dev-docs/empirical-constraints-findings.md`](../dev-docs/empirical-constraints-findings.md); os
+[`docs/arena/loop-design.md`](../docs/arena/loop-design.md); os fatos sobre as features e a
+literatura, de [`docs/arena/evasion-constraints.md`](../docs/arena/evasion-constraints.md)
+e [`docs/arena/empirical-constraints.md`](../docs/arena/empirical-constraints.md); os
 resultados publicados do sistema base, do [`README.md`](../README.md) do repositório. As referências
 completas estão em [`fontes/referencias.md`](fontes/referencias.md).
 
@@ -330,7 +330,7 @@ ruído estatístico. O que este sistema modela é outra coisa, e as três difere
 
 > **[A COMPLETAR — Por que é adversarial]** Tragam **um exemplo concreto de omissão do sistema base que
 > não é adversarial** e contrastem com a evasão. O material oferece um candidato forte, em
-> `dev-docs/empirical-constraints-findings.md` §3.1: o detector aprende do Pool que
+> `docs/arena/empirical-constraints.md` §3.1: o detector aprende do Pool que
 > `num_failed_logins > 0` é o sinal de `guess_passwd` (98,1% dos 53 fluxos do Pool), mas essa feature
 > aparece em apenas 37,9% dos 1.231 fluxos de `guess_passwd` do KDDTest+. As omissões daí decorrentes
 > são um **descasamento de distribuição entre treino e teste**, não um adversário — e argumentar essa
@@ -536,7 +536,7 @@ equilíbrio embute um custo recorrente que recai integralmente sobre quem não �
 A matriz da seção 2 é uma fotografia. Aqui ela vira filme. As rodadas abaixo estão ancoradas no
 mecanismo real de derivação das features do NSL-KDD, e não em uma narrativa plausível: cada efeito
 citado tem origem na descrição oficial da tarefa do KDD Cup 1999, em Lee & Stolfo (2000) ou nas medições
-registradas em `dev-docs/empirical-constraints-findings.md`.
+registradas em `docs/arena/empirical-constraints.md`.
 
 ### 3.1 Quatro rodadas
 
@@ -990,11 +990,11 @@ Declaração exigida pela seção 6 da especificação do trabalho.
 
 1. **Levantamento e verificação de literatura.** Recuperação dos artigos citados, extração das
    definições e das afirmações usadas, e registro de cada uma com autoria, veículo, ano e URL em
-   `dev-docs/research-evasion-constraints.md`. Esse documento marca explicitamente quais afirmações são
+   `docs/arena/evasion-constraints.md`. Esse documento marca explicitamente quais afirmações são
    de um artigo citado e quais são raciocínio do próprio projeto (`[synthesis]`), e mantém uma lista do
    que **não** foi possível verificar.
 2. **Medição empírica sobre o conjunto de dados.** Escrita do script `scripts/fit_mutations.py`, que
-   produziu `data/nsl-kdd/mutations.json` e o relatório `dev-docs/empirical-constraints-findings.md`.
+   produziu `data/nsl-kdd/mutations.json` e o relatório `docs/arena/empirical-constraints.md`.
    Todos os números das seções 3 e 6 deste relatório vêm dessas medições, reproduzíveis com
    `uv run python -m scripts.fit_mutations` e `uv run pytest tests/test_mutations.py`.
 3. **Redação e estruturação deste relatório**, incluindo as tabelas, a derivação do equilíbrio misto da
@@ -1014,7 +1014,7 @@ Declaração exigida pela seção 6 da especificação do trabalho.
 > - **Números de configuração:** conferir cada valor citado aqui contra `configs/arena.toml` e
 >   `data/nsl-kdd/splits/SOURCE.json`. Todos os números deste relatório vêm de um desses dois arquivos,
 >   dos resultados publicados no `README.md` do repositório, ou das medições de
->   `dev-docs/empirical-constraints-findings.md`.
+>   `docs/arena/empirical-constraints.md`.
 > - **Medições:** reexecutar `uv run python -m scripts.fit_mutations` e `uv run pytest
 >   tests/test_mutations.py` e confirmar que os números da seção 6 batem.
 > - **Matemática:** refazer à mão a derivação do equilíbrio misto da seção 2.7 — são duas equações

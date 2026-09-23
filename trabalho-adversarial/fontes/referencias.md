@@ -1,7 +1,7 @@
 # Referências
 
 Formato ABNT (NBR 6023), agrupadas por função no trabalho. Os grupos **2 e 3** foram construídos a
-partir de `dev-docs/research-evasion-constraints.md`, o relatório de pesquisa do próprio projeto, que
+partir de `docs/arena/evasion-constraints.md`, o relatório de pesquisa do próprio projeto, que
 registra autoria, veículo, ano e URL de cada fonte e declara tê-los verificado. Os grupos **4 e 5**
 foram verificados separadamente, contra as fontes primárias.
 
@@ -205,15 +205,15 @@ OWASP GEN AI SECURITY PROJECT. **OWASP Top 10 for LLM Applications 2025**. Dispo
 Documentos do próprio projeto citados no relatório. Não são fontes externas: são o registro das
 decisões e das medições sobre as quais o relatório se apoia.
 
-JEV IDS. **`dev-docs/arena-loop-design.md`** — o protocolo de uma rodada: o atacante por
+JEV IDS. **`docs/arena/loop-design.md`** — o protocolo de uma rodada: o atacante por
 comportamento, os três *splits*, o teste de generalização do portão, o orçamento e as três linhas de
 ameaça.
 
-JEV IDS. **`dev-docs/research-evasion-constraints.md`** — o relatório de pesquisa: as quatro restrições
+JEV IDS. **`docs/arena/evasion-constraints.md`** — o relatório de pesquisa: as quatro restrições
 de Pierazzi et al., a partição do IDSGAN recuperada da Tabela 1, a semântica de derivação das 19
 features e a partição proposta para r2l e dos.
 
-JEV IDS. **`dev-docs/empirical-constraints-findings.md`** — as medições sobre `data/nsl-kdd/pool.csv`
+JEV IDS. **`docs/arena/empirical-constraints.md`** — as medições sobre `data/nsl-kdd/pool.csv`
 (125.973 fluxos) e `data/nsl-kdd/test.csv` (22.544 fluxos): quais acoplamentos sobrevivem aos dados,
 as combinações simbólicas admissíveis, a assinatura de r2l por nome de ataque e os limites das
 alavancas diretas.

@@ -12,7 +12,7 @@ In reading order:
 - `MimicryAttacker`: the search, hill-climbing over donor buckets and then over the levers.
 
 **Why donors and not a parametric behaviour model.** The first design turned behaviour knobs (slower, more spread out) and computed the
-nineteen time-based and host-based features from them. `dev-docs/empirical-constraints-findings.md` killed it: three of the four coupling
+nineteen time-based and host-based features from them. `docs/arena/empirical-constraints.md` killed it: three of the four coupling
 identities such a model would have to respect are contradicted by the Pool (§1), and NSL-KDD carries no timestamps and no connection
 ordering, so no causal model of the derived features can be validated on it at all (§7). Synthesised derived values would be numbers whose
 joint consistency nobody can check, and a reviewer would be right to throw them out.
@@ -38,7 +38,7 @@ handed over rather than about how skilful the attacker is. A Detector that leans
 the evasion rate should say so.
 
 What the attacker returns is a `Strategy`, not a Flow: the gate replays it on held-out Flows the curator never saw
-(`dev-docs/arena-loop-design.md`), so a single mutated Flow would answer nothing. A Strategy names a donor BUCKET and two lever settings,
+(`docs/arena/loop-design.md`), so a single mutated Flow would answer nothing. A Strategy names a donor BUCKET and two lever settings,
 all three of which mean something on a Flow this search never touched.
 
 The feature names below are NSL-KDD's because the constraint model is NSL-KDD's; another Dataset needs its own `mutations.json` and its own
@@ -55,7 +55,7 @@ from typing import Any
 from jev_ids.dataset import Config, Flow
 from jev_ids.records import VERDICT_THRESHOLD, Prediction
 
-# The constraint model beside the card; `scripts/fit_mutations.py` writes it and `dev-docs/empirical-constraints-findings.md` reads it.
+# The constraint model beside the card; `scripts/fit_mutations.py` writes it and `docs/arena/empirical-constraints.md` reads it.
 MODEL_FILE = "mutations.json"
 
 # The features this module reads by name. They are the Card's, but the roles and the bounds that give them meaning are the model's.
@@ -75,7 +75,7 @@ LATENCY = "duration"
 # The features the model calls `derived` that the attacker still may not take from a donor, because the sensor is not who writes them: the
 # VICTIM is. `dst_bytes` is how much the target server answered, and a telnet server's reply to one login attempt does not change because
 # the attacker waited longer between attempts, so a donor's value would claim a reply that never happened. The model's three-value role
-# vocabulary cannot say "derived, but by the victim rather than by the attacker" -- `dev-docs/empirical-constraints-findings.md` §6 and §7
+# vocabulary cannot say "derived, but by the victim rather than by the attacker" -- `docs/arena/empirical-constraints.md` §6 and §7
 # record `dst_bytes` as exactly that forced fit -- so the distinction is made here instead, where it has a consequence.
 VICTIM_WRITES = ("dst_bytes",)
 
@@ -347,7 +347,7 @@ def bucket_of(values: Sequence[str], positions: Mapping[str, int]) -> str:
     busier), how far the same service is spread over hosts (`srv_diff_host_rate`) and how much of the window is one service
     (`same_srv_rate`).
 
-    The two counts are taken at their maximum and not summed or nested, because `dev-docs/empirical-constraints-findings.md` §1.2 shows
+    The two counts are taken at their maximum and not summed or nested, because `docs/arena/empirical-constraints.md` §1.2 shows
     they are two parallel windows: `srv_count > count` in 22 % of the Pool, so neither contains the other.
 
     Args:
@@ -500,7 +500,7 @@ def reachable(donor: Donor, target: Target) -> bool:
     **This filter is an ASSUMPTION and it is the weakest link in the whole model.** It rests on the published derivation semantics -- that
     these are counts inside fixed windows, so a slower and more scattered attacker lands in smaller ones -- and it is untestable on this
     Dataset. NSL-KDD has no timestamps and no connection ordering, so the connection log cannot be replayed and no direction of any
-    derived feature can be falsified from the CSV (`dev-docs/empirical-constraints-findings.md` §7, which marks every such direction
+    derived feature can be falsified from the CSV (`docs/arena/empirical-constraints.md` §7, which marks every such direction
     `support: synthesis`). Nothing here proves an attacker can reach a donor's block; the filter only refuses the donors that the stated
     semantics say it certainly cannot.
 
@@ -588,7 +588,7 @@ def lever_rungs(donors: Donors, flow: Flow, feature: str) -> tuple[int, ...]:
     the sensor sees routinely; the hard ceiling bounds the result instead, in `apply`.
 
     A Category with no headroom gets no rungs at all. For dos the model records `duration` p99 = 0 and max = 14 s, so "add a small
-    latency" is essentially not a lever a dos attacker has on this Dataset (`dev-docs/empirical-constraints-findings.md` §4) and the
+    latency" is essentially not a lever a dos attacker has on this Dataset (`docs/arena/empirical-constraints.md` §4) and the
     search does not pretend otherwise.
     """
     bounds = donors.constraints.levers.get(feature)
@@ -622,7 +622,7 @@ def apply(flow: Flow, strategy: Strategy, donors: Donors, rng: random.Random) ->
     on.
 
     The mutated Flow keeps its parent's `row_id`, `category` and `novel_attack`: the gate pairs on `row_id`
-    (`dev-docs/arena-loop-design.md`), and a mutation that relabelled the Flow would be measuring something else entirely.
+    (`docs/arena/loop-design.md`), and a mutation that relabelled the Flow would be measuring something else entirely.
 
     A bucket with no donor this Flow could wear degrades to the levers alone rather than raising. That happens for real -- a Strategy
     found on a busy Flow can name a bucket no quiet held-out Flow can reach -- and it is the honest outcome: the technique did not

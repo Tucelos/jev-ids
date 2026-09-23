@@ -14,7 +14,7 @@ In reading order:
 - `round_steps`, `play_round`, `play_seed`: one Round, one Round written down, one seed's lineage.
 - `prepare` and `run_arena`: the Run.
 
-The protocol is `dev-docs/arena-loop-design.md` and this module is its implementation; where the two could drift, the comment says which
+The protocol is `docs/arena/loop-design.md` and this module is its implementation; where the two could drift, the comment says which
 way to read them. Three of its rules shape everything below. The gate evaluates one seed at a time, because `gate.pairing` needs each
 row_id once per side and pooled seeds lose the McNemar test. The gate's evaluation set is the held-out Split put through THIS Round's
 Strategies, because a Context that only memorised the Flows the curator saw must fail there. And the Example shortlist is evidence rather

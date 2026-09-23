@@ -31,7 +31,7 @@ what the playbook actually says. Each arm holds one more of them fixed, so the f
   so the prompt is the committed template either way and only the Examples move.
 - `examples_only -> placebo`: what the extra prompt LENGTH bought, the Examples held constant. A playbook rides on every Detector call
   and a longer prompt moves a model's answers on its own, so without this step "the playbook helped" cannot be told from "more text
-  helped" (`dev-docs/arena-loop-design.md`, "Baselines the result is meaningless without").
+  helped" (`docs/arena/loop-design.md`, "Baselines the result is meaningless without").
 - `placebo -> final`: what the Rules' CONTENT bought, length and Examples both held constant. This is the number the whole project
   exists to produce, and it cannot be read without the other three arms.
 

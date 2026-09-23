@@ -6,7 +6,7 @@ Run from the repository root, after `scripts/prepare_nsl_kdd.py` has built the P
 
 An attacker cannot write NSL-KDD feature values: the nineteen time-based and host-based features are recomputed by the sensor from the
 attacker's connection log, so the attacker is parameterised by behaviour and the derived features move as a joint consequence
-(`dev-docs/research-evasion-constraints.md` §4). This script turns that argument into an auditable data file. It never mutates a Flow and
+(`docs/arena/evasion-constraints.md` §4). This script turns that argument into an auditable data file. It never mutates a Flow and
 never searches: it measures the Pool, decides which of the report's predicted couplings the data actually supports, and emits the model.
 
 In reading order:
@@ -291,7 +291,7 @@ BEHAVIOUR_KNOBS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Where this model departs from `dev-docs/research-evasion-constraints.md`. A supervisor should be able to find every disagreement here.
+# Where this model departs from `docs/arena/evasion-constraints.md`. A supervisor should be able to find every disagreement here.
 DEVIATIONS: list[dict[str, str]] = [
     {
         "subject": "urgent",
@@ -800,8 +800,8 @@ def provenance(dataset: Path, card: Config, pool: Path, test: Path, sizes: tuple
         "card": {"path": f"{dataset.as_posix()}/dataset.json", "sha256": card["sha256"]},
         "pool": {"path": pool.as_posix(), "sha256": sha256_of(pool), "flows": sizes[0]},
         "test": {"path": test.as_posix(), "sha256": sha256_of(test), "flows": sizes[1]},
-        "research_report": "dev-docs/research-evasion-constraints.md",
-        "findings": "dev-docs/empirical-constraints-findings.md",
+        "research_report": "docs/arena/evasion-constraints.md",
+        "findings": "docs/arena/empirical-constraints.md",
     }
 
 

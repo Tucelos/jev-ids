@@ -22,7 +22,7 @@ EFFECTS = {"increase", "decrease", "dilute_toward_background", "near_invariant",
 SUPPORT = {"cited", "synthesis"}
 KNOB_DIRECTIONS = {"increase_only", "decrease_only"}
 
-# What `dev-docs/research-evasion-constraints.md` classifies as recomputed by the sensor: the nine time-based features, the ten host-based
+# What `docs/arena/evasion-constraints.md` classifies as recomputed by the sensor: the nine time-based features, the ten host-based
 # ones, `flag` (a TCP termination outcome) and `dst_bytes` (the victim decides how much it answers). None of them may be `direct`.
 SENSOR_DERIVED = {
     "count",

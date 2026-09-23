@@ -69,15 +69,16 @@ desenvolvimento do grupo não tem `make`. Os comandos diretos estão em [`docs/a
 Alternativas: instalar `make` via Git Bash ou Chocolatey; ou escrever um `tasks.py` com o mesmo conteúdo.
 Enquanto isso, os alvos do `Makefile` continuam válidos para o orientador, que usa macOS.
 
-## 7. Mover a pesquisa para fora de `dev-docs/`
+## 7. ~~Tirar a pesquisa de `dev-docs/`~~ — feito
 
-`dev-docs/` está no `.gitignore` herdado, então estes três arquivos **não estão versionados** e se perdem
-se alguém clonar o repositório:
+Os quatro documentos de pesquisa nasceram em `dev-docs/`, que o `.gitignore` herdado não versiona, e um
+clone os teria perdido. São a evidência por trás do `mutations.json`, do relatório e do futuro artigo, de
+modo que estão agora versionados em `docs/arena/`:
 
-- `dev-docs/research-evasion-constraints.md` — o levantamento de literatura, com as citações verificadas
-- `dev-docs/empirical-constraints-findings.md` — as medições sobre os 125.973 fluxos
-- `dev-docs/research-agent-context-refs.md` — as referências de engenharia de contexto agêntica
-- `dev-docs/arena-loop-design.md` — as decisões de protocolo
+- [`evasion-constraints.md`](evasion-constraints.md) — o levantamento de literatura, com as citações verificadas
+- [`empirical-constraints.md`](empirical-constraints.md) — as medições sobre os 125.973 fluxos do Pool
+- [`agent-context-refs.md`](agent-context-refs.md) — as referências de engenharia de contexto agêntica
+- [`loop-design.md`](loop-design.md) — as decisões de protocolo
 
-São a evidência por trás do `mutations.json` e do relatório, e o artigo vai precisar deles. Mover para
-`docs/arena/` e versionar.
+Estão em inglês, como o resto do código e da documentação técnica; o que está em português é o relatório
+do trabalho e os guias de estudo desta pasta.

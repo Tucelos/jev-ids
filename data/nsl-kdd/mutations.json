@@ -2430,7 +2430,7 @@
       "sha256": "d2e33265d8f4c9392584c7de26bf877ae2af98f3fe2281170a2b6da50b640f50",
       "flows": 22544
     },
-    "research_report": "dev-docs/research-evasion-constraints.md",
-    "findings": "dev-docs/empirical-constraints-findings.md"
+    "research_report": "docs/arena/evasion-constraints.md",
+    "findings": "docs/arena/empirical-constraints.md"
   }
 }
