@@ -6,7 +6,8 @@ In reading order:
 - `Discordance`: the attack Flows the two Contexts disagreed on, and the exact test over them.
 - `GatePolicy` and `DEFAULT_POLICY`: the mode and the four thresholds a Run gates on.
 - `GateVerdict`: the decision, why it was taken, and the numbers it was taken on.
-- `false_alarm_rate` and `measure`: the share of benign Flows alerted on, and one side's numbers together.
+- `false_alarm_rate`, `error_rate` and `measure`: the share of benign Flows alerted on, the share of calls that failed, and one side's
+  numbers together.
 - `pairing` and `discordance`: the two sides matched Flow by Flow, and McNemar's exact test over the attack Flows they split on.
 - `chance`, `evidence`, `unmeasurable` and `guard`: the guarded rule itself.
 - `integrity`: the one check both modes run.
@@ -53,7 +54,7 @@ class Measured:
         recall: share of the attack Flows alerted on, or None when no attack Flow was judged.
         false_alarm_rate: share of the benign Flows alerted on, or None when no benign Flow was judged.
         f1: attack-class F1, or None when there was neither an alert nor an attack Flow.
-        error_rate: share of the Predictions whose call failed, or None over no Prediction at all.
+        error_rate: share of the Predictions whose call failed, counted by `error_rate` and not by the missing Verdict.
     """
 
     flows: int
@@ -155,6 +156,28 @@ def false_alarm_rate(predictions: Sequence[Prediction]) -> float | None:
     return metrics.rate([p for p in predictions if p["is_attack"] == 0])
 
 
+def error_rate(predictions: Sequence[Prediction], without_verdict: float | None) -> float | None:
+    """Share of the Predictions whose call failed, counted from the `error` field; `without_verdict` is the fallback.
+
+    Deliberately not `metrics.scores`'s `error_rate`, which counts the rows that came back without a Verdict. That is the right count
+    upstream, where a failed call is fail-open and leaves none. THREAT A3 also runs a fail-closed arm (`threats.on_failure = "closed"`)
+    in which the round loop records a failed call as an alert: `classification_verdict` is 1, the upstream count is zero, and `integrity`
+    could never fire in the very arm built to study what failing calls do. The `error` field is set under both arms, so the gate counts
+    that instead, and `jev_ids.metrics` keeps the meaning upstream needs.
+
+    Args:
+        predictions: one Context's Round.
+        without_verdict: `metrics.scores`'s `error_rate`, used only for rows that carry no `error` field at all.
+
+    Returns:
+        The share of failed calls. A Round where at least one row carries the field is counted by the field throughout, because a row
+        written with the field and no error really did answer; only a Round written entirely before the field existed falls back.
+    """
+    if not any("error" in prediction for prediction in predictions):
+        return without_verdict
+    return metrics.ratio(sum(prediction.get("error") is not None for prediction in predictions), len(predictions))
+
+
 def measure(predictions: Sequence[Prediction]) -> Measured:
     """Recall over the attack Flows, false alarms over the benign ones, F1 and the error rate of one Context's Round."""
     scored = metrics.scores(predictions)
@@ -164,7 +187,7 @@ def measure(predictions: Sequence[Prediction]) -> Measured:
         recall=scored["recall"],
         false_alarm_rate=false_alarm_rate(predictions),
         f1=scored["f1"],
-        error_rate=scored["error_rate"],
+        error_rate=error_rate(predictions, scored["error_rate"]),
     )
 
 
@@ -261,9 +284,11 @@ def integrity(candidate: Measured, max_error_rate: float) -> str | None:
     """Why the candidate Context is not a working Context at all, or None when it is.
 
     A Prediction whose call failed counts as `normal` (fail-open), so a Context that makes the calls themselves fail, by running past
-    the model's context window or by provoking refusals, buys a perfect false-alarm rate by answering nothing. This is an integrity
-    check and not a quality trade-off, so it runs in `mode="none"` as well: the poisoning experiment compares what a gate costs, not
-    what a broken Context does, and a Round that stopped answering is not a result either arm should carry.
+    the model's context window or by provoking refusals, buys a perfect false-alarm rate by answering nothing; under the fail-closed arm
+    it buys a perfect recall the same way. `error_rate` counts the failures from the `error` field for exactly that reason, so both arms
+    are caught. This is an integrity check and not a quality trade-off, so it runs in `mode="none"` as well: the poisoning experiment
+    compares what a gate costs, not what a broken Context does, and a Round that stopped answering is not a result either arm should
+    carry.
     """
     if candidate.error_rate is not None and candidate.error_rate > max_error_rate:
         return f"{candidate.error_rate:.3f} of the candidate's calls failed, over the {max_error_rate:.3f} allowed"

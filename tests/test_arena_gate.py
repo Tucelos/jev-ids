@@ -2,6 +2,7 @@
 
 import pytest
 
+from jev_ids import metrics
 from jev_ids.arena import gate
 from jev_ids.records import Prediction
 from tests.helpers import make_prediction
@@ -20,15 +21,27 @@ def benign_p_attack(index: int, false_alarms: int, failures: int) -> float | Non
     return 0.1
 
 
-def judged(attack_hits: int, false_alarms: int = 0, failures: int = 0, shift: int = 0) -> list[Prediction]:
+def benign_flow(row_id: int, p_attack: float | None, *, fail_closed: bool) -> Prediction:
+    """One benign Flow's Prediction; a call that failed carries an `error`, and under fail-closed it is recorded as an alert."""
+    if p_attack is not None:
+        return make_prediction(row_id, 0, p_attack)
+    failed = make_prediction(row_id, 0, None, error="HTTP 429")
+    if fail_closed:
+        failed["classification_verdict"] = 1  # THREAT A3's fail-closed arm: no answer is treated as an alert
+    return failed
+
+
+def judged(attack_hits: int, false_alarms: int = 0, failures: int = 0, shift: int = 0, fail_closed: bool = False) -> list[Prediction]:
     """One Context's Round over the same hundred Flows, so two of them pair Flow by Flow.
 
     The first `attack_hits` attack Flows are alerted on and the rest missed; `false_alarms` benign Flows are alerted on and `failures`
-    of them come back without a Verdict at all. `shift` moves every row_id, which is how a test makes two Rounds unpairable.
+    of them come back from a failed call, fail-open unless `fail_closed`. `shift` moves every row_id, which is how a test makes two
+    Rounds unpairable.
     """
     attacks = [make_prediction(shift + index, 1, 0.9 if index < attack_hits else 0.1) for index in range(ATTACK_FLOWS)]
     benign = [
-        make_prediction(shift + ATTACK_FLOWS + index, 0, benign_p_attack(index, false_alarms, failures)) for index in range(BENIGN_FLOWS)
+        benign_flow(shift + ATTACK_FLOWS + index, benign_p_attack(index, false_alarms, failures), fail_closed=fail_closed)
+        for index in range(BENIGN_FLOWS)
     ]
     return attacks + benign
 
@@ -108,6 +121,31 @@ def test_a_context_whose_calls_fail_is_refused_in_both_modes() -> None:
     # Under the bar it is a working Context again, and a wider bar lets this one through.
     assert gate.evaluate(judged(20, failures=4), INCUMBENT).accepted
     assert gate.evaluate(broken, INCUMBENT, policy=gate.GatePolicy(max_error_rate=0.1)).accepted
+    # A Round where nothing failed is untouched by the check.
+    assert gate.measure(INCUMBENT).error_rate == 0.0
+    assert gate.evaluate(INCUMBENT, INCUMBENT).accepted
+
+
+def test_a_fail_closed_context_whose_calls_fail_is_caught_by_the_error_field() -> None:
+    # THREAT A3's fail-closed arm records a failed call as an alert, so the Verdict is there and `metrics.scores` sees no error at all.
+    # Counting the missing Verdict would let a Context that answers nothing through the gate in the arm built to study that.
+    broken = judged(20, failures=6, fail_closed=True)
+    assert metrics.scores(broken)["error_rate"] == 0.0
+    assert gate.measure(broken).error_rate == 0.06
+    for verdict in (gate.evaluate(broken, INCUMBENT), gate.evaluate(broken, INCUMBENT, policy=gate.GatePolicy(mode="none"))):
+        assert not verdict.accepted
+        assert verdict.reason == "0.060 of the candidate's calls failed, over the 0.050 allowed"
+    # Fail-closed turns the six failures into false alarms too, but integrity runs first and names the real cause.
+    assert gate.measure(broken).false_alarm_rate == 0.1
+
+
+def test_predictions_without_an_error_field_fall_back_to_the_missing_verdict() -> None:
+    legacy = [make_prediction(index, 0, None if index < 3 else 0.1) for index in range(10)]
+    for row in legacy:
+        del row["error"]
+    assert gate.measure(legacy).error_rate == 0.3
+    # With the field present and empty the field wins: these rows carry no error, so they really did answer.
+    assert gate.measure([make_prediction(index, 0, None) for index in range(10)]).error_rate == 0.0
 
 
 def test_too_few_attack_flows_is_a_refusal_rather_than_a_measurement() -> None:
@@ -179,7 +217,7 @@ def test_an_unknown_mode_is_refused_rather_than_read_as_one_of_the_two() -> None
 def test_a_failed_call_is_not_a_false_alarm() -> None:
     # A Prediction without a Verdict counts as `normal`: fail-open, so it costs the benign Flows nothing, and `integrity` is the only
     # thing standing between that and a Context that scores well by answering nothing.
-    failed = [make_prediction(index, 0, None) for index in range(10)]
+    failed = [make_prediction(index, 0, None, error="boom") for index in range(10)]
     assert gate.false_alarm_rate(failed) == 0.0
     assert gate.false_alarm_rate([]) is None
     assert gate.measure(failed).flows == 10
