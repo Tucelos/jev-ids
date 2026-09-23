@@ -261,25 +261,54 @@ def test_only_the_proposals_that_were_asked_for_are_kept(fake_agent: type[FakeAg
 def test_the_heuristic_writes_no_rule_and_shows_the_categories_it_missed(fake_agent: type[FakeAgent]) -> None:
     context = make_context()
 
-    proposals = curator.HeuristicCurator(LIMITS, seed=7).propose(context, make_evidence(), 2)
+    proposal = curator.HeuristicCurator(LIMITS, seed=7).propose(context, make_evidence(), 1)[0]
 
-    proposal = proposals[0]
-    assert len(proposals) == 1  # deterministic, so a second Proposal would be the same Context judged twice
     assert proposal.rules == context.rules
     # Row 1 was missed and reported as dos, so the dos Flows of the shortlist are the ones shown; 93 is a benign Flow and stays out.
     assert set(proposal.example_ids) == {91, 92}
-    assert proposal.note.startswith("heuristic: 2 missed records, 1 of them reported as attacks")
+    assert proposal.note == "heuristic: 2 missed records, 1 of them reported as attacks; Examples only, no rule"
     assert not fake_agent.built  # no Agent, no key, no call
 
 
-def test_the_heuristic_is_the_same_answer_twice_under_one_seed_and_uses_the_seed(fake_agent: type[FakeAgent]) -> None:
-    context, evidence = make_context(), make_evidence()
-    seven = curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 1)
+def test_the_heuristic_answers_with_as_many_proposals_as_it_was_asked_for_and_no_two_alike() -> None:
+    # The gate keeps the best Proposal of a Round, so an arm handing in one against another arm's two would lose part of every Round to
+    # the number of draws instead of to what the draws are worth.
+    proposals = curator.HeuristicCurator(LIMITS, seed=7).propose(make_context(), make_evidence(), 2)
 
-    assert seven == curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 1)
-    assert seven == curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 1)
-    orders = {curator.HeuristicCurator(LIMITS, seed=seed).propose(context, evidence, 1)[0].example_ids for seed in range(20)}
-    assert len(orders) > 1  # the seed really is what breaks the tie between two equally good candidate Examples
+    assert len(proposals) == 2
+    assert proposals[0].example_ids != proposals[1].example_ids
+    assert {proposal.rules for proposal in proposals} == {make_context().rules}  # a baseline that writes no rule, whatever the draw
+    assert all("of the 2 Proposals asked for" not in proposal.note for proposal in proposals)
+
+
+def test_the_two_curators_answer_the_same_number_of_proposals(fake_agent: type[FakeAgent]) -> None:
+    fake_agent.outcomes = [answered(edits(example_ids=[91], note="one"), edits(example_ids=[92], note="two"))]
+    context, evidence = make_context(), make_evidence()
+
+    asked = 2
+    intelligent = curator.LLMCurator(PROMPT, "deepseek", LIMITS).propose(context, evidence, asked)
+    baseline = curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, asked)
+
+    assert len(intelligent) == len(baseline) == asked
+
+
+def test_the_heuristic_draws_are_reproducible_from_the_seed_alone() -> None:
+    context, evidence = make_context(), make_evidence()
+    seven = curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 2)
+
+    assert seven == curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 2)
+    assert seven == curator.HeuristicCurator(LIMITS, seed=7).propose(context, evidence, 2)
+    drawn = {curator.HeuristicCurator(LIMITS, seed=seed).propose(context, evidence, 1)[0].example_ids for seed in range(20)}
+    assert len(drawn) > 1  # the seed really is what breaks the tie between two equally good candidate Examples
+
+
+def test_a_shortlist_too_thin_to_tell_proposals_apart_yields_fewer_and_says_so() -> None:
+    one_flow = (curator.Candidate(row_id=91, attributes_csv="9,tcp,1", category="dos"),)
+
+    proposals = curator.HeuristicCurator(LIMITS, seed=7).propose(make_context(), make_evidence(candidates=one_flow), 3)
+
+    assert [proposal.example_ids for proposal in proposals] == [(91,)]  # padded with a duplicate it would be one Context gated twice
+    assert proposals[0].note.endswith("; only 1 of the 3 Proposals asked for differ, the shortlist admits no more")
 
 
 def test_the_heuristic_proposes_nothing_when_there_is_nothing_to_learn_from() -> None:

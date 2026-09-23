@@ -12,6 +12,7 @@ In reading order:
 - `collapse`, `shorten`, `next_index`, `rule_text`, `remove`, `apply_edits`, `chosen_examples`, `compose`: the repairs an answer takes.
 - `resolve`: those repairs together, one Proposal from one untrusted set of edits.
 - `LLMCurator`: the curator under study; one Agno Agent per call, stateless.
+- `missed_flows` and `lesson_ids`: what a Round got wrong, and the Examples one draw of the baseline would answer it with.
 - `HeuristicCurator`: the no-intelligence baseline; Examples drawn from the misses, and not one rule.
 - `make_model`: the Agno model of a provider, with its determinism knobs.
 - `Curator`: the two of them, what the round loop holds.
@@ -56,6 +57,8 @@ DEFAULT_OLLAMA_HOST = "http://localhost:11435"
 MAX_RULE_TEXT = 200
 # The note goes into the Round record for a human to read, not to a Detector; long enough for a reason, short enough to stay a reason.
 MAX_NOTE_TEXT = 400
+# Shuffles `HeuristicCurator` may spend per Proposal it was asked for before it accepts that the shortlist has no further distinct answer.
+DRAWS_PER_PROPOSAL = 4
 
 
 @dataclass(frozen=True)
@@ -468,11 +471,42 @@ class LLMCurator:
         return [resolve(proposed, context, evidence, self.limits) for proposed in content.proposals[:count]]
 
 
+def missed_flows(evidence: Evidence) -> tuple[list[Observation], list[Observation]]:
+    """The Round's misses, and the ones among them the analyst reported as an attack.
+
+    The second list is the lesson proper: a Flow the Detector let past that the analyst then called an attack is the one thing a Round can
+    teach without any reasoning at all.
+    """
+    missed = [item for item in evidence.observations if not item.detector_verdict]
+    return missed, [item for item in missed if item.label != evidence.benign]
+
+
+def lesson_ids(context: Context, evidence: Evidence, rng: random.Random) -> list[int]:
+    """The Example row_ids one draw of the heuristic would show, best first.
+
+    The misses the loop happens to offer as candidates come first, then Pool Flows of the Categories the analyst reported for those
+    misses, then whatever the Context already shows. The shuffle is where the draw enters: a tie between candidates of the same Category
+    is broken by `rng` and not by Pool order, which correlates with how the Dataset was collected.
+    """
+    missed, attacks = missed_flows(evidence)
+    wanted = {item.label for item in attacks}
+    offered = {item.row_id for item in evidence.candidates}
+    shuffled = list(evidence.candidates)
+    rng.shuffle(shuffled)
+    ids = [item.row_id for item in (*attacks, *missed) if item.row_id in offered]
+    ids += [item.row_id for item in shuffled if item.category in wanted]
+    return list(dict.fromkeys([*ids, *context.example_ids])) if ids else []
+
+
 class HeuristicCurator:
     """The no-intelligence baseline: no model, no key, no rule; it only chooses which Pool Flows to show as Examples.
 
     It answers the question the LLM curator cannot answer about itself: would adding the Flows the Detector missed as Examples have done
     the same? Without a baseline that spends no reasoning, a gain measured over the Rounds cannot be attributed to any reasoning.
+
+    It answers with as many Proposals as it is asked for, because the gate keeps the best proposal of a Round and two draws at a gate are
+    two chances to clear its bars. A baseline handing in one Proposal against an LLM's two would lose part of every Round to the sample
+    size and not to the reasoning, which is the one comparison this class exists to make.
     """
 
     def __init__(self, limits: Limits, *, seed: int = 0) -> None:
@@ -480,7 +514,7 @@ class HeuristicCurator:
 
         Args:
             limits: the caps every Proposal of this curator is held to.
-            seed: the seed of the one random choice it makes, which ties it breaks between equally good candidate Examples.
+            seed: the seed of the draws it makes, which tie it breaks between equally good candidate Examples.
         """
         self.limits = limits
         self.seed = seed
@@ -490,45 +524,42 @@ class HeuristicCurator:
         self.prompt_hash: str | None = None
 
     def propose(self, context: Context, evidence: Evidence, count: int) -> list[Proposal]:
-        """One Proposal, or none when the Round missed nothing there is an Example for.
+        """`count` Proposals that differ from one another, or fewer when the shortlist cannot tell that many apart.
 
-        The lesson of a Round is what got past the Detector, so the Examples are chosen from the misses: first the missed Flows the loop
-        happens to offer as candidates, then Pool Flows of the Categories the analyst reported for those misses, then whatever the Context
-        already shows, up to `max_examples`. The playbook is handed back untouched, which is what makes this the baseline: every
-        difference it can make is a difference made by Examples alone.
+        The lesson of a Round is what got past the Detector, so every draw chooses its Examples from the misses; the playbook is handed
+        back untouched, which is what makes this the baseline. Every difference it can make is a difference made by Examples alone, so the
+        Examples are also the only axis the draws vary along: draw `index` shuffles the shortlist under `(seed, index)`, which gives a
+        different subset when the shortlist is richer than `max_examples` and a different order when it is not.
 
-        One Proposal whatever `count` asks for: it is deterministic, so a second one would be the same Context judged twice and a Round's
-        Detector calls spent on nothing.
+        Each draw's stream is built from the seed and the index alone, never carried from `__init__`, so a Proposal is a function of
+        `(seed, count)`, the Context and the Evidence: the baseline must not depend on how many Rounds were played before this one.
+
+        Duplicates are never returned as padding. A shortlist that admits one set of Examples yields one Proposal however many were asked
+        for, and the `note` says so, so a Round record shows the arm ran short instead of showing the gate a Context twice.
 
         Args:
             context: the Context in force, whose playbook is kept and whose Examples fill any room left over.
             evidence: what the Round is allowed to tell the curator.
-            count: ignored beyond `count < 1`, which asks for nothing.
+            count: how many Proposals the Round wants; below one asks for nothing.
 
         Returns:
-            One Proposal, or none when `count` is below one or the Round offers no Example to learn from.
+            Up to `count` Proposals, no two of them alike; none when the Round offers no Example to learn from.
         """
-        missed = [item for item in evidence.observations if not item.detector_verdict]
-        attacks = [item for item in missed if item.label != evidence.benign]
-        wanted = {item.label for item in attacks}
-        offered = {item.row_id for item in evidence.candidates}
-        # Shuffled, so a tie between candidates of the same Category is not broken by Pool order, which correlates with how the Dataset was
-        # collected. The stream is built here and not in `__init__`, so a Proposal is a function of the seed, the Context and the Evidence
-        # alone: the baseline must not depend on how many Rounds happened to be played before this one.
-        shuffled = list(evidence.candidates)
-        random.Random(self.seed).shuffle(shuffled)  # noqa: S311  # seeded, not secret
-        lesson = [item.row_id for item in (*attacks, *missed) if item.row_id in offered]
-        lesson += [item.row_id for item in shuffled if item.category in wanted]
-        if count < 1 or not lesson:
-            return []
-        chosen = list(dict.fromkeys([*lesson, *context.example_ids]))[: self.limits.max_examples]
-        return [
-            Proposal(
-                rules=context.rules,
-                example_ids=tuple(chosen),
-                note=f"heuristic: {len(missed)} missed records, {len(attacks)} of them reported as attacks; Examples only, no rule",
-            )
-        ]
+        drawn: list[tuple[int, ...]] = []
+        # A bounded number of draws, so a shortlist with fewer distinct answers than `count` ends the search instead of spinning; the
+        # bound is a multiple of `count`, which keeps the result a function of `(seed, count)` and of nothing else.
+        for index in range(max(count, 0) * DRAWS_PER_PROPOSAL):
+            rng = random.Random(f"{self.seed}:{index}")  # noqa: S311  # seeded, not secret
+            chosen = tuple(lesson_ids(context, evidence, rng)[: self.limits.max_examples])
+            if chosen and chosen not in drawn:
+                drawn.append(chosen)
+            if len(drawn) == count:
+                break
+        missed, attacks = missed_flows(evidence)
+        note = f"heuristic: {len(missed)} missed records, {len(attacks)} of them reported as attacks; Examples only, no rule"
+        if drawn and len(drawn) < count:
+            note += f"; only {len(drawn)} of the {count} Proposals asked for differ, the shortlist admits no more"
+        return [Proposal(rules=context.rules, example_ids=ids, note=note) for ids in drawn]
 
 
 def make_model(provider: str, model_id: str) -> Any:
