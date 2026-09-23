@@ -1,0 +1,73 @@
+# Every knob of one Run of the Arena. Each key below is set to its default, so this file is the list of what can be changed and nothing
+# needs a code edit to change it. A key or a section the Arena does not know raises at load time rather than being ignored:
+# `jev_ids/arena/config.py` holds the fields, the ranges and the allowed values.
+
+[arena]
+# Which Dataset and which Splits the loop runs on, and how long it runs.
+dataset = "data/nsl-kdd/dataset.json"  # the card
+learn_split = "arena"                  # the Split the attacker and the curator work on
+gate_split = "arena-val"               # the held-out Split a proposed Context is scored on: 250 Flows, disjoint from `arena` and from
+                                       # `paper`, so the gate never judges a Context on the Flows the curator learned from
+eval_split = "paper"                   # the Split a kept Context is finally measured on, never learned from
+rounds = 10                            # Rounds per Run
+seeds = [0]                            # one seed fits the default budget; the reported protocol uses [0, 1, 2] and needs the cap tripled
+results_dir = "results/arena"          # where the Round records are written
+
+[detector]
+# The Detector under attack.
+name = "jev"  # "jev" (TypeSafe's System One Model) or "offline" (the free stand-in; its answers mean nothing)
+k = 1         # Examples per Category when the Context chooses none of its own
+
+[attacker]
+# Who mutates the attack Flows, and how hard. These two numbers are the biggest line of the budget below.
+kind = "mimicry"           # "mimicry" moves a Flow toward benign traffic, "llm" asks a model for the next mutation
+flows_per_round = 20       # attack Flows attacked in one Round
+max_queries_per_flow = 30  # Detector calls the attacker may spend on one Flow before giving up on it
+observes = "verdict"       # what the attacker is told back: "verdict" alone or the whole "p_attack"
+categories = ["r2l"]       # the Categories whose Flows are attacked
+
+[curator]
+# Who rewrites the Detector's Context between Rounds.
+kind = "llm"             # "llm" asks a model for a new Context, "heuristic" builds one from the labels alone
+provider = "deepseek"    # the provider of the curator's model, as `detectors.llm` names them
+model = ""               # the provider's model id; empty means the provider default
+max_rules = 15           # how long the playbook may grow
+max_examples = 10        # how many Pool Flows a Context may choose as Examples
+proposals_per_round = 2  # Contexts proposed per Round, for the gate to choose between
+
+[analyst]
+# The simulated human whose labels the curator learns from.
+alert_budget = 50   # alerts one Round's analyst can look at
+sample_rate = 0.1   # the share of the Flows that raised no alert that get looked at anyway
+delay_rounds = 1    # how many Rounds a label lags behind the Round that produced it
+label_noise = 0.0   # the share of labels the analyst gets wrong
+
+[gate]
+# Whether a proposed Context is kept. Field for field the counterpart of `jev_ids.arena.gate.GatePolicy`, which the round loop builds
+# from this section; changing a name here means changing it there.
+mode = "guarded"           # "guarded" applies the rule below, "none" keeps every proposal that is not broken
+recall_slack = 0.0         # how much recall a proposal may give up, as an absolute difference of rates
+false_alarm_slack = 0.02   # how far the false alarm rate may rise, as an absolute difference of rates
+min_attack_flows = 30      # the attack Flows the gate needs before it will decide anything at all
+max_error_rate = 0.05      # the share of failed calls a proposal may have; checked in both modes
+
+[budget]
+# The hard caps, enforced by `jev_ids/arena/budget.py`. An experiment that runs out of provider credits mid-Round is lost
+# (docs/protocol.md, "k stops at 8"), so the defaults above are chosen to fit under this one.
+#
+# Detector calls of a default Run, worst case:
+#   attacker, per seed per Round : flows_per_round x max_queries_per_flow = 20 x 30 =   600
+#   gate,     per seed per Round : |gate_split|   x proposals_per_round   = 250 x 2 =   500
+#                                                                          per Round = 1,100
+#   x rounds (10) x len(seeds) (1)                                                   = 11,000
+# That leaves headroom under the cap. Raising any of the five numbers in that sum raises the total by the same arithmetic: the reported
+# three-seed protocol costs 33,000 and needs `max_detector_calls` raised to match, or the Run stops partway through the second seed.
+max_detector_calls = 20000  # the attacker's probes and the gate's scoring together
+max_curator_calls = 200
+
+[threats]
+# The two ways the loop is asked to misbehave on purpose.
+poisoning = false         # whether the attacker also feeds the analyst mislabeled Flows
+poisoned_fraction = 0.1   # the share of the attacker's Flows that are poison when it does
+on_failure = "open"       # "open": a failed Detector call counts as normal, as upstream does; "closed": it raises an alert
+failure_rate = 0.0        # the share of Detector calls made to fail, to exercise that path
