@@ -1,0 +1,45 @@
+# The Arena with no API key and no cost: a stand-in Detector and a curator that never calls a model.
+#
+#   uv run jev-ids arena --config configs/arena-offline.toml
+#
+# WHAT THIS IS FOR. Exercising the loop end to end — the attacker's search, the analyst's budget, the shortlist, the curator, the gate,
+# and the four files a Run writes — before spending a single paid call. It is how you check that a change did not break the machinery.
+#
+# WHAT IT IS NOT. A result. The offline Detector is a Random Forest wearing a Context's prompt hash, and a forest cannot read a playbook,
+# so the curator's Rules cannot move one answer it gives; only the Examples a Context chooses can. Any curve measured here describes the
+# plumbing. The real numbers come from `configs/arena.toml` with Jev.
+#
+# Only the keys that differ from `configs/arena.toml` are set; everything else keeps the default stated there.
+
+[arena]
+rounds = 2               # enough to see a second Round read the first Round's labels
+results_dir = "results/arena-offline"
+
+[detector]
+name = "offline"
+# k = 1 makes this forest useless even as plumbing: trained on five Flows it alerts on 100% of the traffic, so nothing evades, the
+# analyst sees no quiet Flow to sample, and the curator is handed no miss to learn from — the loop runs and every number is degenerate.
+# Upstream measured the same thing: precision 0.598 at k = 1 against 0.794 at k = 8 (docs/results.md). Forty Examples is the smallest
+# draw that leaves the loop something to do.
+k = 8
+
+[attacker]
+flows_per_round = 10       # small, because a forest answers in a millisecond but a Round still has to be read by a human
+max_queries_per_flow = 20
+
+[analyst]
+# Raised from the 0.1 of `configs/arena.toml`, and only because this file is a smoke test rather than a result. Work the observability
+# arithmetic: a Flow the attacker got through raises no alert, so it reaches the analyst only through this sample. At 10 attacked Flows,
+# a 20% evasion rate and a 10% sample, the curator is handed 0.2 evaded Flows per Round and learns nothing in a two-Round run — not
+# because the curator is weak but because the defence never saw the evasion. That is a real finding about observability and it belongs in
+# the report; it also makes for a smoke test where nothing visibly happens. `configs/arena.toml` keeps the realistic 0.1.
+sample_rate = 0.4
+
+[curator]
+kind = "heuristic"         # no model, no key, deterministic: the baseline the LLM curator has to beat
+proposals_per_round = 2
+
+[budget]
+# attacker 10 x 20 = 200, traffic |arena| = 550, gate 250 x 3 = 750, so 1,500 per seed per Round and 3,000 over the two Rounds.
+max_detector_calls = 5000
+max_curator_calls = 20

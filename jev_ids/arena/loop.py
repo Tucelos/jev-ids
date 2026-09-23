@@ -71,7 +71,11 @@ ATTACKERS = {"mimicry": "MimicryAttacker", "llm": "LLMAttacker"}
 # How the Example shortlist is drawn. These three numbers decide an experiment, so they are named, written into every Round record and
 # kept out of the config on purpose: both curators must be offered the very same shortlist, and a knob invites one Run to differ.
 SHORTLIST_PER_MISS = 3
-SHORTLIST_UNIFORM = 10
+# Comfortably more than `curator.max_examples` (10), and that margin is the point. When the shortlist is no larger than the number of
+# Examples a Context may hold, every curator has the same forced choice and the heuristic baseline can only vary the ORDER it shows them
+# in, which is a far smaller perturbation than the LLM arm's genuinely different playbooks. The two arms would then differ in how much
+# their draws differ, which is the same bias as differing in how many draws they get.
+SHORTLIST_UNIFORM = 30
 SHORTLIST_CAP = 40
 SHORTLIST_HOW = (
     f"per missed record, {SHORTLIST_PER_MISS} Pool Flows of the Category the analyst reported, seeded, capped at {SHORTLIST_CAP}; "
