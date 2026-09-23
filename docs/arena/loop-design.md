@@ -14,9 +14,11 @@ Pool, because `count` and `srv_count` are taken over two parallel windows rather
 at 255. Worse, NSL-KDD carries no timestamps and no connection ordering, so no causal model of those features can be validated on it at
 all. Synthesising derived values would mean inventing numbers whose joint consistency nobody can check.
 
-So the attacker uses **constrained mimicry by donor substitution**: it never invents a derived value, it copies the whole nineteen-feature
-block from one real Flow the sensor actually produced, keeps the attack's fixed features, and moves only `duration` and `src_bytes` within
-measured bounds. Whatever the true couplings are, a real block satisfies them by construction. This is Pierazzi's problem-space projection
+So the attacker uses **constrained mimicry by donor substitution**: it never invents a derived value, it copies the whole derived block
+from one real Flow the sensor actually produced, keeps the attack's fixed features, and moves only `duration` and `src_bytes` within
+measured bounds. For r2l and probe that block is twenty features — the nineteen time-based and host-based ones plus `flag`; for dos, ten,
+since the Category's own overrides freeze the rest. `dst_bytes` never travels: the victim writes it, and copying it would claim a reply
+the server never sent. Whatever the true couplings are, a real block satisfies them by construction. This is Pierazzi's problem-space projection
 with the side-effect features arriving as a bundle.
 
 What the attacker returns is therefore a **Strategy** — the donor bucket plus the direct-lever settings — and not a mutated Flow. A

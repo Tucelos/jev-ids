@@ -1,181 +1,211 @@
-<img src="docs/banner.svg" alt="Jev IDS banner showing the jev_ids terminal lockup, the tagline &quot;Intrusion detection with a System One Model, benchmarked against an LLM and a Random Forest.&quot;, and the command that runs a detector over NSL-KDD" width="100%" />
+# Jev IDS — the Arena fork
 
-# Jev IDS
+**An adversarial loop around an intrusion Detector.** An attacker mutates attack Flows until the
+Detector stops alerting on them; a simulated analyst labels the small share of the traffic a real SOC
+would have time for; an LLM curator reads only those labels and rewrites the Detector's Context
+between Rounds; and a gate refuses any rewritten Context that buys recall by raising false alarms.
+Ten Rounds of that is one Run, and the question a Run exists to answer is whether a Detector whose
+prompt is rewritten each Round holds up against an attacker who adapts to it.
 
-![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-0B6B3A?style=flat&labelColor=121917) ![Detector Jev, from TypeSafe](https://img.shields.io/badge/detector-Jev%20%28TypeSafe%29-0B6B3A?style=flat&labelColor=121917) ![Dataset NSL-KDD](https://img.shields.io/badge/dataset-NSL--KDD-0B6B3A?style=flat&labelColor=121917) ![License MIT](https://img.shields.io/badge/license-MIT-0B6B3A?style=flat&labelColor=121917)
+> ## This is a fork, and the baseline numbers are not ours
+>
+> Upstream is **[jev-ids/jev-ids](https://github.com/jev-ids/jev-ids)** by **Paulo Severo**, **Silvio
+> Quincozes** and **Amanda Dias**, MIT licensed. It is the Detector, the Dataset preparation, the
+> metrics and the paper protocol; everything under `results/paper/` was measured by them and is
+> quoted here, never re-measured. The [`LICENSE`](LICENSE) is theirs and stays as it is, and their
+> front page is preserved word for word at
+> [`docs/upstream-readme.md`](docs/upstream-readme.md) — read it first if you want to know what Jev
+> IDS is before reading what this fork does to it.
+>
+> What this fork adds is everything under `jev_ids/arena/`, `configs/arena*.toml`,
+> `prompts/arena/`, `docs/arena/` and `trabalho-adversarial/`.
 
-**Intrusion detection in one request. Show [TypeSafe's Jev](https://docs.typesafe.ai/introduction) one network flow and five labeled examples. It answers whether the flow is an attack and which kind, in half a second, with no text to parse.**
+## What is new here
 
-Jev IDS was tested on NSL-KDD, a reference benchmark of the cybersecurity community, against a state-of-the-art LLM (Gemini 3.6 Flash on Vertex AI), a classic machine-learning model (Random Forest) and an unsupervised one (Isolation Forest): 2,000 flows, three seeds, k from 0 to 8 examples per category. Given the same five examples (k = 1), Jev IDS was:
+A **Context** is the only thing about the Detector that may change between Rounds: a **playbook** of
+up to fifteen short sentences placed in the request's `state`, and up to ten Pool Flows chosen as
+Examples. The instructions, the column names, the Category descriptions, the wording of both
+questions and the 0.5 cut are protocol and no Context may touch them.
 
-- **7.7× faster** than the LLM: 0.32 s against 2.42 s per flow.
-- **22× cheaper** than the LLM: $74 against $1,651 per million flows, at list prices.
-- **As precise as the LLM**: 0.953 against 0.942.
-- **18× fewer false alarms** than the Random Forest: 43 against 764 on the same 874 benign flows.
+One Round, in the order [`docs/arena/loop-design.md`](docs/arena/loop-design.md) fixes:
 
-The LLM is the better detector on F1: 0.880 against Jev's 0.856 at k = 1, and ahead at every k (McNemar p < 0.001), because it catches more attacks of the kinds shown in the examples. Jev is the second best, and on zero-day attacks, kinds absent from the examples, it catches more than the LLM from k = 1 to k = 8 (0.747 against 0.713 at k = 1). The numbers, the figures and their limits are in [Evidence and limits](#evidence-and-limits) and [docs/results.md](docs/results.md).
+1. **Attack.** The attacker takes twenty attack Flows of the `arena` Split and spends at most thirty
+   Detector calls on each, searching for a setting the Detector no longer alerts on. It never writes
+   a derived feature value: it copies the whole twenty-feature derived block from one real benign
+   Pool Flow — a **donor** — and moves only `duration` and `src_bytes`, increase-only, inside
+   measured bounds. What it returns is a **Strategy** (a donor bucket plus the two lever settings),
+   not a mutated Flow, so the same technique can be replayed on Flows it never touched.
+2. **Traffic.** The whole `arena` Split, its attack Flows mutated with the Strategies found, judged
+   under the Context in force.
+3. **Labels.** The analyst reviews the alert queue down to fifty, highest `p_attack` first, plus a
+   10% sample of the Flows that raised none. That sample is the only channel through which a missed
+   attack can ever become knowledge.
+4. **Learn.** The curator reads those labels — never a Flow's true Category, never whether a label
+   was tampered with — and proposes two Contexts.
+5. **Gate.** Each proposal and the incumbent judge the *same* held-out `arena-val` Split, mutated
+   with this Round's Strategies. A proposal is kept only if it loses no recall it cannot be shown to
+   have lost by chance and raises the false-alarm rate by no more than two points.
 
-[Read the loop](jev_ids/run.py) · [The request template](prompts/nsl-kdd/jev.json) · [Glossary](CONTEXT.md)
+## Three findings that are this project's own
 
-## How it works
+- **The coupling identities the adversarial-ML literature assumes for NSL-KDD do not hold.** Three of
+  the four are violated in **27.5% to 60.5%** of the **125,973** Pool Flows, because `count` and
+  `srv_count` are taken over two *parallel* windows rather than one nested pair, and the
+  `dst_host_*` counts saturate at 255. That is why the attacker copies a real donor's block instead
+  of computing one. Measured by `scripts/fit_mutations.py`; the table is in
+  [`docs/arena/empirical-constraints.md`](docs/arena/empirical-constraints.md).
+- **For r2l, slowing down is not a lever.** **69.3%** of the `arena` Split's r2l Flows already sit at
+  `count = 1`, against 37.5% for probe. An attacker cannot thin a window that holds one connection,
+  so the two Categories under attack have very different room to move — and the contrast between
+  them is the result, not a nuisance ([`configs/arena.toml`](configs/arena.toml), `[attacker]`).
+- **A curated Context changes three things at once, so the answer needs four arms.** It changes which
+  Examples are shown, how long the prompt is, and what the playbook says. `baseline →
+  examples_only → placebo → final` holds one more of them fixed at each step, and the
+  `placebo → final` step is the only one that separates *"the playbook helped"* from *"more text
+  helped"*. Without the placebo arm the headline claim is not testable
+  ([`jev_ids/arena/final.py`](jev_ids/arena/final.py)).
 
-Jev is a System One Model. Instead of writing text, it reads a `state` and answers typed questions about it with probabilities. Jev IDS puts one flow into the state, next to the instructions, the column names, the five category descriptions and the labeled examples, and asks two questions. `is_attack` comes back as a probability. `category` comes back as one of five options with a confidence. The verdict is attack when the probability reaches 0.5.
+**No result yet.** The loop has never been run against Jev. Only the no-key offline smoke run below
+has been executed, and the offline Detector is a Random Forest that cannot read a playbook at all —
+nothing measured with it is a result. Every number on this page is either upstream's or a measurement
+of the Dataset itself.
 
-<img src="docs/verdict.svg" alt="One flow, two typed answers: is_attack, a noul question, returns 0.82, above the 0.5 cut, so the verdict is attack; category, a choice question, returns dos with confidence 0.84" width="100%" />
+## Install
 
-Every request follows the same path:
-
-<img src="docs/request.svg" alt="The flow under test and the labeled examples go into one request to Jev, whose state holds instructions, columns, categories, examples and the flow, with two typed questions; the answers come back as p_attack 0.82, verdict attack, and category dos with confidence 0.84" width="100%" />
-
-The whole request is one file, [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json). Python adds only the flow and the examples, and the file's sha256 travels in every prediction row as `prompt_hash`, so runs that asked different things are never compared as equals. Examples are labeled by category only: attack names such as `neptune` never reach a model.
-
-The same flows, examples and 0.5 cut go to two baselines: an LLM through an Agno agent with a JSON output schema (Gemini 3.6 Flash through Vertex AI in the paper; GPT-5.6 through the ChatGPT Codex backend or DeepSeek as alternatives) and a scikit-learn Random Forest trained on the same examples. A third baseline, an Isolation Forest fitted on the benign flows of the pool alone, never sees an example: it is the unsupervised reference, at k = all only.
-
-## Try it
+Python 3.13 and [`uv`](https://docs.astral.sh/uv/). **`make` is not required and is not used here** —
+the [`Makefile`](Makefile) targets are kept for upstream's macOS and Linux machines, and every
+command on this page is the direct `uv` equivalent.
 
 ```bash
-git clone https://github.com/jev-ids/jev-ids.git
+git clone https://github.com/Tucelos/jev-ids.git
 cd jev-ids
 uv sync
-# .env: TYPESAFE_API_KEY for Jev. Gemini needs `gcloud auth application-default login` and GOOGLE_GENAI_USE_VERTEXAI=true,
-# GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION=global in the environment; DEEPSEEK_API_KEY and CHATGPT_CLIENT_ID only for the other LLMs.
+cp .env.example .env
 ```
 
-Download [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) into `data/raw/nsl-kdd/` and prepare it once:
+`.env` is git-ignored and lists every key the project can read. Fill only what you run: nothing at
+all for the offline smoke run, `TYPESAFE_API_KEY` for the Detector, and one provider key
+(`DEEPSEEK_API_KEY` or `OPENAI_API_KEY`) for the LLM curator.
+
+## Get the data
+
+Download [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) into `data/raw/nsl-kdd/` — the
+two files `KDDTrain+.txt` and `KDDTest+.txt` — then prepare it once:
 
 ```bash
 uv run python -m scripts.prepare_nsl_kdd
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split smoke --k 0,1
 ```
 
-The smoke split is five flows. The run writes `results/<timestamp>-nsl-kdd-jev-smoke/` with `config.json`, one JSON row per flow in `predictions.jsonl` (the verdict, the truth, p_attack, the category, the confidence, the latency and the gateway's token report) and the raw answers in `responses.jsonl`.
+That writes `data/nsl-kdd/pool.csv` (125,973 Flows) and `data/nsl-kdd/test.csv` (22,544). The Splits
+under `data/nsl-kdd/splits/` and the constraint model `data/nsl-kdd/mutations.json` are committed, so
+nothing else has to be drawn or fitted.
 
-## Compare detectors
+## Run the loop with no API key and no cost
 
 ```bash
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector jev --split pilot --k 0,1,2,4,8 --seeds 0,1,2
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector llm:gemini --model gemini-3.6-flash --split pilot --k 0,1,2,4,8
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector random_forest --split pilot --k 1,2,4,8,all
-uv run jev-ids run --dataset data/nsl-kdd/dataset.json --detector isolation_forest --split pilot --k all
-uv run jev-ids metrics results/<run_id> [results/<run_id> ...] > results/summary.csv
-uv run jev-ids compare --a results/<jev_run> --b results/<rf_run> --subset novel --k-a 0 --k-b all  # novel = zero-day attacks
+uv run jev-ids arena --config configs/arena-offline.toml --dry-run   # what it would spend
+uv run jev-ids arena --config configs/arena-offline.toml             # about 35 s, every call free
 ```
 
-k is the number of labeled examples per category. k = 1 with five categories means five examples, and `all` means the whole pool. `metrics` prints one CSV row per detector and k with F1, recall on zero-day attacks (`novel` in the code) and per category, PR-AUC and ROC-AUC of p_attack, tokens, latency and cost. `compare` pairs two runs flow by flow and runs McNemar's test on the discordant pairs, because only the flows two detectors disagree on tell them apart. Cost is computed offline as tokens times the list prices in [`prices.json`](prices.json), for every detector alike.
+Two Rounds against a Random Forest wearing the Context's prompt hash. It exercises the attacker's
+search, the analyst's budget, the shortlist, the curator, the gate and all four files a Run writes,
+and it produces **no result whatsoever**. A gate that rejects every proposal is the expected outcome
+and not a failure; [`docs/arena/como-rodar.md`](docs/arena/como-rodar.md) walks through the output
+line by line.
 
-## Reproduce the paper
+## Run the loop for real
 
-[`docs/protocol.md`](docs/protocol.md) fixes the inputs (the 2,000-flow `paper` split, the prompts, the model ids, the prices) and `make paper` runs the four detectors over that split into `results/paper/` and writes `results/paper/summary.csv`. Each detector has its own target (`make paper-jev`, `make paper-llm`, `make paper-random-forest`, `make paper-isolation-forest`), so they can run in separate terminals; the LLM is the slow one. `make paper-llm` runs Gemini 3.6 Flash on Vertex AI as five parallel processes, one per k (`make -j5 paper-llm`); a quota error or a timeout is an error row, and `uv run jev-ids redo-errors results/paper/<run>` judges those flows again in place. The full tables and figures are in [`docs/results.md`](docs/results.md).
+```bash
+uv run jev-ids arena --dry-run                    # 19,000 Detector calls against a 20,000 cap
+uv run jev-ids arena --config configs/arena.toml  # the committed protocol: 10 Rounds, seed 0
+```
 
-## Why it is fast and cheap
+Needs `TYPESAFE_API_KEY` and the curator's provider key. The Run projects its whole cost before the
+first call and refuses to start one it cannot finish, before creating any directory. Three seeds cost
+57,000 calls and are refused on purpose; see [`docs/arena/como-rodar.md`](docs/arena/como-rodar.md)
+for the arithmetic and what to do about it.
 
-- **One request, two answers.** Both questions run over the same state and come back as a probability, an option and a confidence. Nothing to parse, no schema to enforce.
-- **Input only.** Jev charges $0.042 per million input tokens and nothing for output. At about 1,800 tokens per flow, a million verdicts cost about $74.
-- **The prompt is a file.** Its sha256 rides in every row, so runs with different prompts are never compared as equals.
-- **Flows in the innermost loop.** The prompt prefix stays constant as long as possible, so provider caches get their best chance.
-- **Fail open.** A failed call becomes a row with `error`, counted as no alert. Never a crash.
-- **Same cut for everyone.** p_attack ≥ 0.5 decides for Jev, the LLM and the forest. No per-detector tuning.
+## Measure a finished Run
 
-## Small enough to read
+The loop's own numbers cannot answer whether the curator helped: across a Run, version 0 and the
+final Context were in force in different Rounds against different mutations. This judges four
+Contexts over one identical set of Flows on the untouched `paper` Split:
 
-| File                                                                   | Job                                                                           |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [cli.py](jev_ids/cli.py)                                               | `run`, `metrics` and `compare`                                                |
-| [dataset.py](jev_ids/dataset.py)                                       | The card, the pool, the splits and the k-shot example draw                    |
-| [run.py](jev_ids/run.py)                                               | The loop, cell by cell and flow by flow, and the three files of a run         |
-| [records.py](jev_ids/records.py)                                       | One prediction row and its JSONL                                              |
-| [metrics.py](jev_ids/metrics.py)                                       | F1, recall per category, PR-AUC, tokens, cost, latency, the paired comparison |
-| [detectors/jev.py](jev_ids/detectors/jev.py)                           | Jev through TypeSafe's API, one flow per request                              |
-| [detectors/llm.py](jev_ids/detectors/llm.py)                           | The LLM baselines through Agno                                                |
-| [detectors/random_forest.py](jev_ids/detectors/random_forest.py)       | The classical baseline                                                        |
-| [detectors/isolation_forest.py](jev_ids/detectors/isolation_forest.py) | The unsupervised baseline, fitted on benign traffic alone                     |
-| [prompts/nsl-kdd/](prompts/nsl-kdd)                                    | `jev.json`, the whole request template; `llm.md`, the agent's instructions    |
+```bash
+uv run jev-ids arena-eval results/arena/<run_id> --dry-run
+uv run jev-ids arena-eval results/arena/<run_id>                      # prints the table as CSV
+uv run jev-ids arena-eval results/arena/<run_id> --report results/arena-eval/<eval_id>
+```
 
-## Evidence and limits
+The four rows per seed read as three steps: `baseline → examples_only` is what choosing the Examples
+bought, `examples_only → placebo` is what the extra prompt length bought, and `placebo → final` is
+what the Rules actually say. Recall never appears without mean `input_tokens` beside it.
 
-Paper split of NSL-KDD: 2,000 flows disjoint from the pilot, 1,126 of them attacks and 300 of those zero-day, of a kind absent from the example pool. Three seeds of examples, so 6,000 predictions per detector and k. Means over the three seeds, from the runs of 2026-09-22 in [`results/paper/`](results/paper), summarized in [`docs/results.md`](docs/results.md).
+The per-Round and per-Run tables are not on the command line yet; reach them from Python:
 
-| Detector         | k   | F1    | Precision | Recall | Zero-day recall | False alarms / 874 normal | Latency | Cost per 1M flows |
-| ---------------- | --- | ----- | --------- | ------ | --------------- | ------------------------- | ------- | ----------------- |
-| Jev              | 1   | 0.856 | 0.953     | 0.778  | 0.747           | 43                        | 0.32 s  | $74               |
-| Gemini 3.6 Flash | 1   | 0.880 | 0.942     | 0.826  | 0.713           | 57                        | 2.42 s  | $1,651            |
-| Random Forest    | 1   | 0.748 | 0.598     | 1.000  | 1.000           | 764                       | 3 ms    | local             |
-| Jev              | 8   | 0.854 | 0.942     | 0.783  | 0.721           | 56                        | 0.33 s  | $295              |
-| Gemini 3.6 Flash | 8   | 0.881 | 0.949     | 0.823  | 0.702           | 50                        | 1.99 s  | $3,035            |
-| Random Forest    | 8   | 0.865 | 0.794     | 0.950  | 0.912           | 278                       | 3 ms    | local             |
-| Random Forest    | all | 0.765 | 0.971     | 0.631  | 0.263           | —                         | 3 ms    | local             |
-| Isolation Forest | all | 0.761 | 0.974     | 0.624  | 0.573           | —                         | 3 ms    | local             |
+```bash
+uv run python -c "from pathlib import Path; from jev_ids.arena import report; from jev_ids.cli import print_csv; print_csv(report.summarize_rounds(Path('results/arena/<run_id>')))"
+```
 
-Jev against Gemini over all 6,000 paired verdicts at k = 1: 508 differ, Jev is right in 195 and Gemini in 313 (McNemar p < 0.001); Gemini leads at every k. On the 900 zero-day attacks at k = 1: 118 differ, Jev is right in 74 and Gemini in 44 (p = 0.007); Jev also leads at k = 2, and the two are indistinguishable at k = 4 and 8. Jev against the Random Forest over all flows at k = 1: 2,909 differ, Jev is right in 2,161 (p < 0.001); the forest overtakes Jev only at k = 8 (0.865 against 0.854, p = 0.007). A forest trained on five rows calls almost everything an attack, which is why its recall is perfect and its precision is not.
+## The repository, file by file
 
-<img src="docs/results-f1-three-sets.svg" alt="F1 by k for three attack sets, all with the normal flows: all attacks, known-type attacks and zero-day attacks; Gemini leads the first two, Jev leads zero-day from k = 1, the Random Forest is last on zero-day" width="100%" />
+| File | Job |
+| --- | --- |
+| [cli.py](jev_ids/cli.py) | `run`, `redo-errors`, `metrics`, `compare`, `arena`, `arena-eval` |
+| [dataset.py](jev_ids/dataset.py) | The Card, the Pool, the Splits and the k-shot Example draw |
+| [run.py](jev_ids/run.py) | Upstream's loop, cell by cell and Flow by Flow |
+| [records.py](jev_ids/records.py) | One Prediction row and its JSONL |
+| [metrics.py](jev_ids/metrics.py) | F1, recall per Category, PR-AUC, tokens, cost, McNemar |
+| [detectors/jev.py](jev_ids/detectors/jev.py) | Jev through TypeSafe's API, one Flow per request |
+| [detectors/llm.py](jev_ids/detectors/llm.py) | The LLM baselines through Agno |
+| [detectors/random_forest.py](jev_ids/detectors/random_forest.py) | The classical baseline |
+| [detectors/isolation_forest.py](jev_ids/detectors/isolation_forest.py) | The unsupervised baseline |
+| [detectors/offline.py](jev_ids/detectors/offline.py) | That forest wearing a Context's prompt hash, so the Arena runs free |
+| [arena/context.py](jev_ids/arena/context.py) | The Context: the playbook, the chosen Examples, and how it renders to a prompt |
+| [arena/config.py](jev_ids/arena/config.py) | Every knob of `configs/arena.toml`; an unknown key raises at load time |
+| [arena/budget.py](jev_ids/arena/budget.py) | The hard cap on the calls one Run may make |
+| [arena/attacker.py](jev_ids/arena/attacker.py) | Constrained mimicry by donor substitution, and the search over it |
+| [arena/analyst.py](jev_ids/arena/analyst.py) | The simulated analyst, the label budget, the poisoning arm and `for_curator` |
+| [arena/curator.py](jev_ids/arena/curator.py) | The LLM curator and the heuristic baseline it has to beat |
+| [arena/gate.py](jev_ids/arena/gate.py) | Whether a proposed Context replaces the one in force, and why |
+| [arena/loop.py](jev_ids/arena/loop.py) | One Round played over and over, and the pre-flight projection |
+| [arena/records.py](jev_ids/arena/records.py) | The four files a Run writes |
+| [arena/report.py](jev_ids/arena/report.py) | The per-Round, per-Run and Run-against-Run tables |
+| [arena/final.py](jev_ids/arena/final.py) | The four-arm measurement on the untouched Split |
+| [configs/arena.toml](configs/arena.toml) | The committed protocol, every knob commented |
+| [configs/arena-offline.toml](configs/arena-offline.toml) | The same loop with no key and no cost |
+| [prompts/arena/curator.md](prompts/arena/curator.md) | What the LLM curator is told |
+| [scripts/fit_mutations.py](scripts/fit_mutations.py) | Fits `data/nsl-kdd/mutations.json` from the Pool |
 
-The multipliers at the top come from the k = 1 rows: 2,421 ms against 315 ms per flow, $1,651 against $74 per million flows, precision 0.942 against 0.953, and 764 against 43 false alarms on the same 874 benign flows.
+## Documentation
 
-Limits worth knowing:
-
-- Gemini's cost is the list price through 2026-12-31 ($0.75 input, $3.75 output per million tokens); it doubles on 2027-01-01. Jev's is TypeSafe's list price. Neither is what was billed.
-- Gemini's latency was measured with five processes in parallel on a congested day (transient 429, 500 and 504 answers, all repaired with `redo-errors`), so it is a real-day figure, not a floor. Jev's latency is the wall clock around one direct call to TypeSafe's API.
-- Gemini 3.x cannot switch thinking off; it ran at `thinking_level="low"`, about 200 reasoning tokens per flow, billed as output.
-- NF-UQ-NIDS-v2 has a card and a preparation script and no run yet. Every number here is NSL-KDD's.
-- Jev's `noul` answer carries no confidence. Only the `choice` answer does.
+| Where | What |
+| --- | --- |
+| [`docs/arena/`](docs/arena/README.md) | The fork's own documentation: how to run it, how it is built, and the four research documents behind it (index in Portuguese, research in English) |
+| [`trabalho-adversarial/README.md`](trabalho-adversarial/README.md) | The course report, in Portuguese: actors, strategic model, threats, limits |
+| [`CONTEXT.md`](CONTEXT.md) | The glossary. Flow, Category, Split, Detector, Prediction, Verdict — use these words and no others |
+| [`docs/upstream-readme.md`](docs/upstream-readme.md) | Upstream's front page, preserved |
+| [`docs/protocol.md`](docs/protocol.md) and [`docs/results.md`](docs/results.md) | Upstream's paper protocol and published results |
+| [`docs/arena/tarefas.md`](docs/arena/tarefas.md) | What the fork inherited and has not decided yet |
 
 ## Development
 
+No `make` on Windows. Run the gate's parts directly:
+
 ```bash
-make check
+uvx ruff check . && uvx ruff format --check .
+uvx complexipy -q --max-complexity-allowed 15 .
+uv run pyright
+uv run pytest
 ```
 
-Python 3.13+. The gate runs ruff with Google-style docstring rules, complexipy, pyright in strict mode, pytest with coverage, vulture, pip-audit and jscpd. Thresholds live in `pyproject.toml` and `.jscpd.json`. Runs make paid API calls and write only under `results/`.
-
-## Bring your own flows
-
-Jev IDS is an independent research prototype, not a product. Its numbers come from one benchmark, NSL-KDD, and it is not affiliated with TypeSafe. It can still sit inside a commercial solution, and this is how.
-
-### Where Jev fits
-
-A commercial IDS already has sensors, a flow exporter and a signature engine feeding a SIEM. Jev IDS replaces none of them. It sits beside the pipeline, off the packet path, and judges one flow record at a time:
-
-- **Second opinion on alerts.** Send Jev the flow behind each alert the signature engine raised. `p_attack` ranks the queue, and the SOC reads the top first. On the paper split at k = 1, Jev raised 43 false alarms on 874 benign flows where a Random Forest raised 764.
-- **A net behind the signatures.** Signatures miss what they have never seen. Sample the flows the engine passed as clean, or every flow to a critical asset, and let Jev judge them: it caught 75% of the zero-day attacks at k = 1, where the LLM caught 71%.
-- **A category for the playbook.** The `choice` answer names the category with a confidence, so the SIEM routes dos, probe, r2l and u2r, or your own taxonomy, to different runbooks with no parser in between.
-- **Coverage from day one.** A new site or tenant has no training set. Jev needs one labeled flow per category, so it covers the segment while a classical model is still collecting data.
-
-Half a second per verdict and a rate-limited API make this an asynchronous side channel, fed from the exporter (NetFlow, IPFIX, Zeek `conn.log`) through a queue, never an inline filter.
-
-### Six steps
-
-1. **Get a key.** Jev is served by TypeSafe; set `TYPESAFE_API_KEY` in `.env`. Pricing and terms are TypeSafe's.
-2. **Describe your flows.** Write a dataset card like [`data/nsl-kdd/dataset.json`](data/nsl-kdd/dataset.json): the columns your flow exporter emits, in order, which of them are symbolic, your categories and which one is benign.
-3. **Write the request.** Copy [`prompts/nsl-kdd/jev.json`](prompts/nsl-kdd/jev.json), replace `columns` and the category descriptions with yours, and keep the two questions.
-4. **Pick examples.** One labeled flow per category from your own network is enough to start; k = 1 is where the benchmark's F1 reaches its plateau.
-5. **Call the detector.** `JevDetector(load_prompt(path)).predict(flow, examples)` returns `p_attack`, `category_pred` and `confidence` for one flow in about half a second. Route `p_attack` to your alerting with the cut your alarm budget allows; 0.5 was the benchmark's choice, not a rule.
-6. **Measure before you trust.** Run `jev-ids run` and `jev-ids metrics` on a labeled split of your own flows. The numbers above are NSL-KDD's, not yours.
-
-Only flow features leave your network, never payloads, but they do leave it: every request goes to TypeSafe's API.
-
-## Team
-
-<table align="center">
-  <tr>
-    <td align="center" width="220">
-      <a href="https://github.com/paulosevero"><img src="https://github.com/paulosevero.png?size=120" width="96" alt="Paulo Severo" /></a><br />
-      <b>Paulo Severo</b><br />
-      <a href="https://github.com/paulosevero"><code>@paulosevero</code></a>
-    </td>
-    <td align="center" width="220">
-      <a href="https://github.com/sequincozes"><img src="https://github.com/sequincozes.png?size=120" width="96" alt="Silvio Quincozes" /></a><br />
-      <b>Silvio Quincozes</b><br />
-      <a href="https://github.com/sequincozes"><code>@sequincozes</code></a>
-    </td>
-    <td align="center" width="220">
-      <a href="https://github.com/amandadiasdev"><img src="https://github.com/amandadiasdev.png?size=120" width="96" alt="Amanda Dias" /></a><br />
-      <b>Amanda Dias</b><br />
-      <a href="https://github.com/amandadiasdev"><code>@amandadiasdev</code></a>
-    </td>
-  </tr>
-</table>
+`make check` also runs vulture, pip-audit and jscpd; read them off the [`Makefile`](Makefile) if you
+want the full gate. Thresholds live in [`pyproject.toml`](pyproject.toml). `git config core.autocrlf false` matters here:
+prompts, Cards and Splits are hashed as bytes, so a CRLF checkout silently changes every
+`prompt_hash` and stops a Run being comparable with upstream's. [`.gitattributes`](.gitattributes)
+pins `eol=lf` for exactly that reason.
 
 ---
 
-[TypeSafe docs](https://docs.typesafe.ai/introduction) · [Jev models and pricing](https://docs.typesafe.ai/models) · [NSL-KDD](https://www.kaggle.com/datasets/hassan06/nslkdd) · [Glossary](CONTEXT.md)
+Fork of [jev-ids/jev-ids](https://github.com/jev-ids/jev-ids) · MIT · not affiliated with TypeSafe ·
+[Glossary](CONTEXT.md)

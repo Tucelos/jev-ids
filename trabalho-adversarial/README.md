@@ -69,10 +69,23 @@ milhão de fluxos.
 > **Uma tentativa de login remoto contra um servidor da rede é observada pelo sensor, convertida em um
 > fluxo de 41 atributos, submetida ao detector em uma requisição e recebe um veredito.**
 
-Concretamente, são ataques da Categoria **r2l** — *remote-to-local*, adivinhação de credenciais
-(`guess_passwd`) e abuso de FTP anônimo (`warezmaster`) — o que a configuração fixa em
-`attacker.categories = ["r2l"]`. Fica **fora do recorte**: a resposta do SOC ao alerta, o bloqueio, o
-caminho de pacotes, a exfiltração posterior, e as outras Categorias de ataque, que aparecem apenas como
+A decisão analisada é essa, e os ataques que a disputam são os da Categoria **r2l** —
+*remote-to-local*, adivinhação de credenciais (`guess_passwd`) e abuso de FTP anônimo
+(`warezmaster`).
+
+O laço, porém, ataca **duas** Categorias: `attacker.categories = ["r2l", "probe"]`. **Isso não alarga o
+recorte, e a razão de o segundo braço existir é metodológica.** O r2l é a interação delimitada; o probe
+é o **controle** que torna o resultado do r2l legível. Como a §1.6 mostra, o r2l quase não tem para onde
+se mover sob um modelo de restrições realista — **69,3% dos seus fluxos no *split* `arena` já estão em
+`count = 1`**, ou seja, já são lentos —, e uma taxa de evasão baixa, sozinha, é ambígua: ela pode
+significar "a defesa é forte" ou "a Categoria não tinha para onde ir", e não distingue as duas. O probe
+distingue, porque é a Categoria com espaço de manobra e é precisamente o comportamento que o bloco
+`dst_host_*` foi construído para pegar (§3). **Os fluxos de probe são julgados pela mesma decisão, pelo
+mesmo detector, sob o mesmo Contexto e com o mesmo corte em 0,5** — o segundo braço é uma condição de
+comparação, não uma segunda interação.
+
+Fica **fora do recorte**: a resposta do SOC ao alerta, o bloqueio, o
+caminho de pacotes, a exfiltração posterior, e as Categorias `dos` e `u2r`, que aparecem apenas como
 tráfego de fundo que o portão também precisa não estragar.
 
 O que torna esta interação repetível — e portanto um jogo, e não um evento — é o laço que este projeto
@@ -89,7 +102,7 @@ quinto que não decide nada e paga parte da conta.
 
 | Ator | Objetivo | Ações ou capacidades | Informações observáveis | Restrições ou custos |
 |---|---|---|---|---|
-| **Atacante r2l** (evasivo) | Fazer com que uma tentativa de login remoto **não gere alerta**, sem deixar de ser um ataque r2l | **Escolher uma faixa de doadores** — perfis de tráfego real com o comportamento desejado: ritmo mais lento, dispersão por hosts, dispersão por serviços — e copiar delas o bloco inteiro das 19 features derivadas; mover `duration` e `src_bytes` dentro dos limites medidos. **Não escreve nem calcula valores de feature derivada** (§1.6) | Apenas o **veredito** que o detector devolve, por fluxo (`attacker.observes = "verdict"`). Não vê o Contexto, o *playbook*, os exemplos, o portão nem o `p_attack` | Até **30 chamadas ao detector por fluxo**, 20 fluxos por rodada. Não pode alterar as 12 features de conteúdo nem as intrínsecas sem destruir o próprio ataque. Só alcança os perfis que o sensor já produziu. Cada sondagem é uma conexão que o sensor registra |
+| **Atacante evasivo** (r2l; probe como controle) | Fazer com que uma tentativa de login remoto **não gere alerta**, sem deixar de ser o ataque que é | **Escolher uma faixa de doadores** — perfis de tráfego real com o comportamento desejado: ritmo mais lento, dispersão por hosts, dispersão por serviços — e copiar delas o bloco inteiro das 19 features derivadas; mover `duration` e `src_bytes` dentro dos limites medidos. **Não escreve nem calcula valores de feature derivada** (§1.6) | Apenas o **veredito** que o detector devolve, por fluxo (`attacker.observes = "verdict"`). Não vê o Contexto, o *playbook*, os exemplos, o portão nem o `p_attack` | Até **30 chamadas ao detector por fluxo**, 20 fluxos por rodada. Não pode alterar as 12 features de conteúdo nem as intrínsecas sem destruir o próprio ataque. Só alcança os perfis que o sensor já produziu. Cada sondagem é uma conexão que o sensor registra |
 | **Detector** (Jev sob um Contexto) | Dar o veredito correto para cada fluxo | Uma requisição por fluxo, duas perguntas tipadas, veredito em `p_attack >= 0.5` | O fluxo sob julgamento, mais o Contexto em vigor. Não tem memória entre requisições nem sabe que existe um laço | Não decide nada sobre si: seu comportamento só muda porque o Contexto mudou. Chamada remota, sujeita a falha; sob `on_failure = "open"`, falha conta como ausência de alerta |
 | **Curador** (agente LLM) | Escrever um Contexto que recupere o recall perdido sem custar falsos alarmes | Propor **2 Contextos por rodada**: reescrever o *playbook* (≤ 15 regras) e trocar os exemplos (≤ 10 fluxos do Pool) | Só o `Feedback` do analista, projetado por `for_curator`: `row_id`, veredito do detector, `p_attack` e o **rótulo que o analista escreveu**. **Nunca** a Category real, nunca `arena-val`, nunca `paper`, nunca se um rótulo foi adulterado | Atraso de **1 rodada** nos rótulos. Teto de 200 chamadas ao seu próprio modelo por execução. Suas propostas só entram em vigor se o portão aceitar |
 | **Analista** (humano simulado) | Rotular o que der tempo | Revisar a fila de alertas até **50 por rodada**, do maior `p_attack` para baixo, mais **10% dos fluxos que não geraram alerta** | O tráfego da rodada e os vereditos do detector | O orçamento acima. Erra uma fração `label_noise` dos rótulos (0,0 no padrão). É o **único** canal por onde uma detecção perdida vira conhecimento |
@@ -217,11 +230,38 @@ seguem sendo as jogadas do atacante — é assim que os doadores são agrupados 
 tráfego real já observado** que tem aquela característica. A jogada é a mesma; a sua realização deixou
 de ser síntese e passou a ser escolha.
 
+#### Quanto espaço de manobra cada Categoria realmente tem
+
+Aqui o modelo de restrições produz um resultado que vale por si. Medindo no *split* `arena` a fração de
+fluxos que já está em `count = 1` — uma única conexão na janela de 2 s, o piso da escala:
+
+| Categoria | Fluxos em `arena` | Já em `count = 1` | Fração |
+|---|-:|-:|-:|
+| **r2l** | 150 | 104 | **69,3%** |
+| **probe** | 40 | 15 | **37,5%** |
+| **dos** | 100 | 12 | **12,0%** |
+| *normal* (referência) | *250* | *50* | *20,0%* |
+
+**Reduzir o ritmo não é alavanca para o r2l: ele já é lento** — e, note-se, mais lento que o próprio
+tráfego benigno de referência. Não há para onde desacelerar. E o que identifica um r2l — falhas de
+login, `hot`, `is_guest_login` — é o que **define** o ataque, e por isso está congelado no modelo de
+restrições: removê-lo removeria o ataque.
+
+A conclusão merece ser dita com todas as letras, porque é um resultado e não um obstáculo: **sob um
+modelo de restrições realista, o r2l é quase inevadível por manipulação de comportamento.** É o oposto
+do que o IDSGAN reporta, e pela razão exata que a observação abaixo registra.
+
 > **Uma observação que vale a pena fazer na apresentação.** A partição de features do IDSGAN, muito
 > citada na área, libera para r2l exatamente as 19 features derivadas — as que o atacante menos consegue
 > definir. Este trabalho não se limita a discordar por argumento: mostra, com número e sobre 125.973
-> fluxos, que o modelo que tal liberdade exigiria **não se sustenta nos dados**. É uma refutação
-> empírica de uma suposição corrente, e não uma preferência de desenho.
+> fluxos, que o modelo que tal liberdade exigiria **não se sustenta nos dados**; e a tabela acima mostra
+> que, mesmo se ele se sustentasse, a folga que ele supõe não existe no r2l. É uma refutação empírica de
+> uma suposição corrente, e não uma preferência de desenho.
+
+É também a razão de o **probe** entrar como segundo braço (§1.1): com 37,5% no piso contra 69,3%, ele
+tem espaço de manobra onde o r2l não tem, e é o comportamento que o bloco `dst_host_*` foi construído
+para pegar. Sem ele, uma taxa de evasão baixa no r2l não distinguiria uma defesa forte de uma Categoria
+sem saída.
 
 ### 1.7 Pressupostos e como falham
 
@@ -538,13 +578,18 @@ mecanismo real de derivação das features do NSL-KDD, e não em uma narrativa p
 citado tem origem na descrição oficial da tarefa do KDD Cup 1999, em Lee & Stolfo (2000) ou nas medições
 registradas em `docs/arena/empirical-constraints.md`.
 
+A decisão analisada é a mesma do começo ao fim — o veredito sobre uma tentativa de login remoto. Quando
+as rodadas abaixo dizem que o movimento aconteceu no braço **probe**, isso não muda a decisão nem o
+recorte: é o braço de controle (§1.1) revelando onde havia espaço de manobra, que é justamente o que
+torna interpretável o resultado do r2l.
+
 ### 3.1 Quatro rodadas
 
 | Rodada | Ação do participante | Resposta do sistema ou defensor | O que se torna observável? | Adaptação para a rodada seguinte |
 |-:|---|---|---|---|
-| **1** | O atacante joga **ritmo mais lento**: seleciona doadores na faixa dos perfis de tráfego real de baixa cadência e copia deles o bloco inteiro das 19 features derivadas; sobre `duration` e `src_bytes` usa as alavancas diretas, viáveis em r2l — no Pool, `duration` vai a p90 = 134 s e p99 = 12.546 s. O bloco chega **pronto e mutuamente consistente**: nesses doadores `count` e `srv_count` já são baixos, por serem contagens brutas numa janela **fixa de 2 s**, e `same_srv_rate` já acompanha — `same_srv_rate ≈ min(1, srv_count/count)` vale dentro de 0,005 em 98,9% do Pool. O atacante não calculou nada disso; herdou | Contexto **v0**, sem *playbook*, k = 1 exemplo por Categoria. O bloco temporal do fluxo passa a parecer o de uma conexão tranquila; `p_attack` cai abaixo de 0,5. **Sem alerta** | **Para o atacante:** um bit por fluxo — "não alertou" —, e a busca lhe diz *qual faixa de doadores* virou o veredito. **Para o defensor:** quase nada. Esses fluxos não geraram alerta, então só chegam ao analista pela amostra de 10% do silêncio: dos 20 fluxos de ataque da rodada, cerca de **2** são olhados e rotulados r2l | O curador da rodada 2 lê esses 2 rótulos (com 1 rodada de atraso) e enfrenta o fato estrutural que decide o jogo: nos doadores lentos, as dez features `dst_host_*` **não acompanham** a queda, porque sua janela é de 100 conexões ao mesmo host e não um intervalo de tempo. Escreve uma regra apontando o detector para lá |
-| **2** | O atacante **repete** a Estratégia da rodada 1 — mesma faixa de doadores, mesmas alavancas. É a jogada A1, a mais barata | O curador propõe **2 Contextos**; o portão julga cada proposta e o titular sobre o **mesmo** conjunto: os 150 fluxos benignos de `arena-val` inalterados mais seus fluxos de ataque mutados com a Estratégia **desta** rodada. Aceita se o recall não cair e o falso alarme subir no máximo 2 p.p. — sobre 150 fluxos benignos, **no máximo 3 alertas falsos a mais**. Aceito, entra em vigor: o detector **alerta** | **Para o atacante:** o veredito virou. Ele sabe que a defesa se moveu, mas **não sabe o quê** — nunca vê o Contexto. **Para o defensor:** os fluxos entram na fila de alertas (orçamento de 50), o analista confirma r2l e o rótulo é de boa qualidade, porque veio do topo da fila ordenada por `p_attack` | O atacante não tem para onde ir dentro da faixa lenta: é precisamente contra ela que o bloco host-based foi construído. A descrição da tarefa do KDD é explícita — as features host-based existem porque "alguns ataques de varredura escaneiam os hosts usando um intervalo muito maior que dois segundos". Ele precisa trocar de faixa: **dispersão** |
-| **3** | O atacante joga **dispersão por hosts e serviços**: passa a selecionar doadores entre os perfis reais de tráfego espalhado, em que `dst_host_count` e `dst_host_srv_count` por alvo são baixos e `srv_diff_host_rate` e `dst_host_srv_diff_host_rate` são altos. De novo são valores reais, não calculados. A regra da rodada 2, que se apoiava em `dst_host_count` alto, deixa de disparar | Resultado **misto**: parte dos fluxos volta a evadir, parte ainda alerta. O portão não é acionado contra o titular; o Contexto em vigor continua o mesmo | **Para o atacante:** vereditos divididos — informação mais rica que na rodada 1, porque o contraste entre os fluxos que passaram e os que não passaram localiza a fronteira da regra. **Para o defensor:** fila mista. O analista gasta o orçamento nos 50 maiores `p_attack` e amostra 10% do silêncio. Aparece a **nova** assinatura: poucas conexões por alvo, muitos alvos | O curador precisa escrever uma regra sobre a **assinatura acoplada** e não sobre uma feature isolada, porque para cada feature isolada existe uma faixa de doadores reais que a desfaz. O teste de generalização do portão é o que separa as duas coisas: uma regra que decorou os 20 fluxos de `arena` não se sustenta sobre os fluxos de `arena-val` mutados com a mesma Estratégia |
+| **1** | O atacante joga a alavanca mais barata, **ritmo mais lento**: seleciona doadores na faixa dos perfis de tráfego real de baixa cadência e copia deles o bloco inteiro das 19 features derivadas. Os dois braços respondem de modo oposto, e é isso que faz a rodada valer. No **probe** há espaço: 62,5% dos seus fluxos estão acima do piso e podem descer. No **r2l não há** — 69,3% já estão em `count = 1` (§1.6) e não existe para onde desacelerar; sobra-lhe apenas `duration` e `src_bytes`, que são alavancas reais nessa Categoria (no Pool, `duration` vai a p90 = 134 s e p99 = 12.546 s). Quando o bloco muda, chega **pronto e mutuamente consistente**: nesses doadores `count` e `srv_count` já são baixos, por serem contagens brutas numa janela **fixa de 2 s**, e `same_srv_rate` já acompanha — `same_srv_rate ≈ min(1, srv_count/count)` vale dentro de 0,005 em 98,9% do Pool. O atacante não calculou nada disso; herdou | Contexto **v0**, sem *playbook*, k = 1 exemplo por Categoria. Os fluxos de **probe** que receberam doadores lentos perdem a assinatura de rajada; `p_attack` cai abaixo de 0,5 e **não há alerta**. Os de **r2l** em boa parte continuam alertando: o que os identifica é o bloco de conteúdo — falhas de login, `hot`, `is_guest_login` —, que está congelado porque removê-lo removeria o ataque | **Para o atacante:** um bit por fluxo, e a assimetria entre os dois braços já lhe diz onde há espaço. **Para o defensor:** quase nada sobre o que evadiu. Os fluxos que passaram não geraram alerta, então só chegam ao analista pela amostra de 10% do silêncio: dos 20 fluxos atacados na rodada, cerca de **2** são olhados e rotulados | O curador da rodada 2 lê esses 2 rótulos (com 1 rodada de atraso) e enfrenta o fato estrutural que decide o jogo: nos doadores lentos, as dez features `dst_host_*` **não acompanham** a queda, porque sua janela é de 100 conexões ao mesmo host e não um intervalo de tempo. Escreve uma regra apontando o detector para lá |
+| **2** | O atacante **repete** a Estratégia da rodada 1 — mesma faixa de doadores, mesmas alavancas. É a jogada A1, a mais barata | O curador propõe **2 Contextos**; o portão julga cada proposta e o titular sobre o **mesmo** conjunto: os 150 fluxos benignos de `arena-val` inalterados mais seus fluxos de ataque mutados com a Estratégia **desta** rodada. Aceita se o recall não cair e o falso alarme subir no máximo 2 p.p. — sobre 150 fluxos benignos, **no máximo 3 alertas falsos a mais**. Aceito, entra em vigor: o detector **alerta** | **Para o atacante:** o veredito virou. Ele sabe que a defesa se moveu, mas **não sabe o quê** — nunca vê o Contexto. **Para o defensor:** os fluxos entram na fila de alertas (orçamento de 50), o analista confirma o ataque e o rótulo é de boa qualidade, porque veio do topo da fila ordenada por `p_attack` | O atacante não tem para onde ir dentro da faixa lenta: é precisamente contra ela que o bloco host-based foi construído. A descrição da tarefa do KDD é explícita — as features host-based existem porque "alguns ataques de varredura escaneiam os hosts usando um intervalo muito maior que dois segundos". Ele precisa trocar de faixa: **dispersão** |
+| **3** | O atacante joga **dispersão por hosts e serviços**: passa a selecionar doadores entre os perfis reais de tráfego espalhado, em que `dst_host_count` e `dst_host_srv_count` por alvo são baixos e `srv_diff_host_rate` e `dst_host_srv_diff_host_rate` são altos. De novo são valores reais, não calculados. É de novo o braço **probe** que se move — dispersar é o comportamento que ele tem e o r2l não —, e a regra da rodada 2, que se apoiava em `dst_host_count` alto, deixa de disparar | Resultado **misto**: parte dos fluxos volta a evadir, parte ainda alerta. O portão não é acionado contra o titular; o Contexto em vigor continua o mesmo | **Para o atacante:** vereditos divididos — informação mais rica que na rodada 1, porque o contraste entre os fluxos que passaram e os que não passaram localiza a fronteira da regra. **Para o defensor:** fila mista. O analista gasta o orçamento nos 50 maiores `p_attack` e amostra 10% do silêncio. Aparece a **nova** assinatura: poucas conexões por alvo, muitos alvos | O curador precisa escrever uma regra sobre a **assinatura acoplada** e não sobre uma feature isolada, porque para cada feature isolada existe uma faixa de doadores reais que a desfaz. O teste de generalização do portão é o que separa as duas coisas: uma regra que decorou os 20 fluxos de `arena` não se sustenta sobre os fluxos de `arena-val` mutados com a mesma Estratégia |
 | **4** | O atacante **mantém a dispersão** e a leva mais longe, estreitando a faixa de doadores até tomá-los de perfis que são, eles próprios, de varredura administrativa legítima | O curador propõe a regra ampla — "logins que tocam muitos hosts com poucas conexões em cada". Ela **também** descreve a varredura matinal de um administrador, um agente de monitoramento e uma rotina de backup. O falso alarme sobre os benignos de `arena-val` ultrapassa a folga de 2 p.p. e **o portão recusa**. O titular permanece; a rodada registra o motivo | **Para o atacante:** continua evadindo, e agora com uma informação valiosa que ele obtém **de graça**: existe uma região do espaço de comportamento em que a defesa não consegue entrar sem quebrar o tráfego legítimo. **Para o defensor:** a recusa é o registro explícito de um conflito entre detecção e sobriedade | O atacante aprende a se **esconder dentro da restrição do defensor**, não do detector. O curador precisa de outra coisa que não uma regra mais ampla: exemplos melhores (até 10 do Pool), uma regra condicionada ao serviço, ou aceitar o risco residual. É aqui que a defesa encontra seu limite real |
 
 Duas propriedades que a especificação do trabalho pede explicitamente e que estas rodadas exibem:
