@@ -68,7 +68,10 @@ class Context:
 
         A Context renders to a prompt file so the original traceability machinery keeps working unchanged: `JevDetector(ctx.to_prompt(t))`
         just works, and every Prediction row carries that version's `prompt_hash`, so a row can always be traced to the exact Context that
-        produced it. The serialization is deterministic (`indent=2, sort_keys=True`), so the same Context always hashes the same.
+        produced it. The serialization keeps the template's own key order rather than sorting: a fixed template through a fixed
+        transformation is already deterministic, and sorting would have reordered `state.categories` the moment a playbook appeared, so
+        version 0 and version 1 would have differed by the order the Categories are offered in as well as by the playbook. That
+        difference would have landed in every measurement of whether the curator helped.
 
         The playbook goes to `state.playbook` as plain sentences: the rule ids and the Round numbers are the curator's bookkeeping and
         leaking them would tell the Detector how old a piece of advice is. Both questions then gain `PLAYBOOK_CLAUSE`, the one fixed
@@ -95,7 +98,7 @@ class Context:
         body["state"]["playbook"] = [rule.text for rule in self.rules]
         for question in body["questions"].values():
             question["instructions"] += PLAYBOOK_CLAUSE
-        text = json.dumps(body, indent=2, sort_keys=True)
+        text = json.dumps(body, indent=2)
         return {"text": text, "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,17 +111,14 @@ class Context:
             "note": self.note,
         }
 
-    def with_rules(self, rules: Sequence[Rule], version: int, note: str) -> "Context":
-        """A child of this Context with another playbook; the chosen Examples are kept.
+    def child(self, *, rules: Sequence[Rule], example_ids: Sequence[int], version: int, note: str) -> "Context":
+        """A child of this Context carrying a curator's whole proposal: the new playbook and the new chosen Examples.
 
-        The Arena hands in the version rather than counting from this one, because a Round may propose several children of the same parent
-        and they must not share a number.
+        One method and not one per field, because a curator proposes both at once and chaining two would make the second child the parent
+        of itself. The Arena hands in the version rather than counting from this one, since a Round may propose several children of the
+        same parent and they must not share a number.
         """
-        return replace(self, version=version, rules=tuple(rules), parent=self.version, note=note)
-
-    def with_examples(self, example_ids: Sequence[int], version: int, note: str) -> "Context":
-        """A child of this Context with other chosen Examples; the playbook is kept."""
-        return replace(self, version=version, example_ids=tuple(example_ids), parent=self.version, note=note)
+        return replace(self, version=version, rules=tuple(rules), example_ids=tuple(example_ids), parent=self.version, note=note)
 
 
 def baseline_context() -> Context:

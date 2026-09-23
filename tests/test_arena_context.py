@@ -116,10 +116,10 @@ def test_a_context_survives_a_round_trip_through_json() -> None:
     assert context.to_dict()["rules"][1] == {"id": "r2", "text": RULES[1].text, "added_round": 3}
 
 
-def test_a_child_changes_one_thing_keeps_the_other_and_leaves_its_parent_alone() -> None:
+def test_a_child_carries_a_whole_proposal_and_leaves_its_parent_alone() -> None:
     parent = Context(version=2, rules=RULES, example_ids=(11, 4), parent=1, note="a start")
-    shorter = parent.with_rules(RULES[:1], version=3, note="r2 never fired")
-    chosen = parent.with_examples([7], version=4, note="a clearer probe")
+    shorter = parent.child(rules=RULES[:1], example_ids=(11, 4), version=3, note="r2 never fired")
+    chosen = parent.child(rules=RULES, example_ids=[7], version=4, note="a clearer probe")
 
     assert (shorter.version, shorter.parent, shorter.note) == (3, 2, "r2 never fired")
     assert (shorter.rules, shorter.example_ids) == (RULES[:1], (11, 4))
