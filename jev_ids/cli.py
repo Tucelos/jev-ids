@@ -1,11 +1,11 @@
-"""The command line: `jev-ids run|metrics|compare|arena`, also reachable as `python -m jev_ids`.
+"""The command line: `jev-ids run|metrics|compare|arena|arena-eval`, also reachable as `python -m jev_ids`.
 
 In reading order:
 
 - `parse_k` and `parse_list`: the list arguments (`--k 0,1,all`).
-- `build_parser`: the five subcommands and their arguments.
-- `run_command`, `metrics_command`, `compare_command`, `arena_command`: one handler per subcommand, each turning the parsed arguments into
-  calls of `run`, `metrics` or `arena.loop`.
+- `build_parser`: the six subcommands and their arguments.
+- `run_command`, `metrics_command`, `compare_command`, `arena_command`, `eval_command`: one handler per subcommand, each turning the
+  parsed arguments into calls of `run`, `metrics`, `arena.loop` or `arena.final`.
 - `print_csv`: a table as CSV on stdout.
 - `main`: parse, dispatch, return the exit code.
 
@@ -25,7 +25,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from jev_ids import ROOT, metrics, run
-from jev_ids.arena import loop
+from jev_ids.arena import final, loop
 from jev_ids.arena.config import ARENA_CONFIG, ArenaConfig, check_choices, check_ranges, load_arena_config
 from jev_ids.records import read_predictions
 
@@ -45,7 +45,7 @@ def parse_list(text: str) -> tuple[int | None, ...]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The five subcommands; each one carries the function that handles it."""
+    """The six subcommands; each one carries the function that handles it."""
     parser = argparse.ArgumentParser(prog="jev-ids")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -97,6 +97,15 @@ def build_parser() -> argparse.ArgumentParser:
     arena.add_argument("--detector", help="override [detector] name: jev or offline")
     arena.add_argument("--dry-run", action="store_true", help="print the pre-flight projection and stop, without a single call")
     arena.set_defaults(handler=arena_command)
+
+    evaluator = commands.add_parser(
+        "arena-eval", help="measure a finished arena run on the eval split: four contexts over the very same flows"
+    )
+    evaluator.add_argument("run_dir", type=Path, help="results/arena/<run_id>, the finished run to measure")
+    evaluator.add_argument("--dry-run", action="store_true", help="print the pre-flight projection and stop, without a single call")
+    evaluator.add_argument("--results-dir", type=Path, default=final.EVAL_RESULTS, help="where the evaluation directory is created")
+    evaluator.add_argument("--report", type=Path, help="print the table of a finished evaluation instead of running one")
+    evaluator.set_defaults(handler=eval_command)
     return parser
 
 
@@ -164,6 +173,22 @@ def arena_command(args: argparse.Namespace) -> None:
         print(json.dumps(loop.preflight(config).to_dict(), indent=2))
         return
     loop.run_arena(config)
+
+
+def eval_command(args: argparse.Namespace) -> None:
+    """`arena-eval`: the measurement that can be quoted, its projection, or the table of one already made.
+
+    The loop's own numbers cannot answer whether the curator helped: across a Run the baseline and the final Context were judged in
+    different Rounds against different mutations, and proposals were selected on the gate split that measured them. This judges four
+    Contexts over one identical set of Flows, so the comparison is paired and the three steps of the decomposition are readable.
+    """
+    if args.report is not None:
+        print_csv(final.summarize_eval(args.report))
+        return
+    if args.dry_run:
+        print(json.dumps(final.preflight(args.run_dir).to_dict(), indent=2))
+        return
+    print_csv(final.summarize_eval(final.run_final(args.run_dir, results_dir=args.results_dir)))
 
 
 def print_csv(rows: Sequence[dict[str, Any]]) -> None:

@@ -14,6 +14,10 @@
 [arena]
 rounds = 2               # enough to see a second Round read the first Round's labels
 results_dir = "results/arena-offline"
+# `paper` is 2,000 Flows and `jev-ids arena-eval` judges the whole Split four times, which is 8,000 calls — fine against Jev's real
+# budget, pointless here. `pilot` is 300 Flows, disjoint from arena and arena-val alike, so the smoke test measures the same way for a
+# twentieth of the calls.
+eval_split = "pilot"
 
 [detector]
 name = "offline"
