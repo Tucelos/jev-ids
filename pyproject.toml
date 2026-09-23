@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
-    "agno[openai,google]>=3.0.10",
+    "agno[openai,google,ollama]>=3.0.10",
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
