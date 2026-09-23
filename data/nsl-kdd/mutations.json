@@ -1,0 +1,2436 @@
+{
+  "schema_version": "1",
+  "purpose": "The empirical constraint model an evasive attacker on NSL-KDD must obey. It holds no mutation and no search: a consumer reads the roles, the knobs and the constraints from here and does the moving itself.",
+  "vocabulary": {
+    "roles": {
+      "direct": "The attacker sets it by choosing its own behaviour.",
+      "derived": "The sensor recomputes it from the connection log; reachable only as a joint consequence of behaviour.",
+      "fixed": "Attack semantics or a definitional invariant pins it; changing it destroys the attack or the plausibility."
+    },
+    "effects": {
+      "increase": "The knob raises the feature.",
+      "decrease": "The knob lowers the feature.",
+      "dilute_toward_background": "A ratio over a fixed 2 s window; slowing down shrinks the attacker's share of it, so the value drifts toward the ambient traffic mix instead of falling with the rate.",
+      "near_invariant": "Computed over a 100-connection window rather than a time span, so slowing down barely moves it.",
+      "unchanged": "The knob does not touch it.",
+      "unspecified": "The research report's \u00a74 gives no direction and this project will not guess one."
+    },
+    "support": {
+      "cited": "The cited work states it.",
+      "synthesis": "The research report marks it as its own reasoning."
+    }
+  },
+  "features": {
+    "duration": {
+      "role": "direct",
+      "why": "The attacker adds latency; increase-only and bounded by what the sensor ever observed.",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited"
+    },
+    "protocol_type": {
+      "role": "fixed",
+      "why": "It decides which services and flags are admissible at all.",
+      "citation": "Sheatsley et al., arXiv:2011.01183, 2020",
+      "support": "cited"
+    },
+    "service": {
+      "role": "fixed",
+      "why": "Constrained by the protocol, and r2l attacks are service-defined.",
+      "citation": "Sheatsley et al., arXiv:2011.01183, 2020",
+      "support": "cited"
+    },
+    "flag": {
+      "role": "derived",
+      "why": "TCP termination status is an outcome of the connection, not a field the attacker writes.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "src_bytes": {
+      "role": "direct",
+      "why": "The attacker pads the request with junk data; increase-only and bounded.",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited"
+    },
+    "dst_bytes": {
+      "role": "derived",
+      "why": "The r2l victim server decides how much it answers; only a botnet attacker owns both ends.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "land": {
+      "role": "fixed",
+      "why": "Definitional invariant: source host and port equal destination host and port.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "cited"
+    },
+    "wrong_fragment": {
+      "role": "fixed",
+      "why": "Definitional for fragmentation dos (teardrop) and zero for r2l.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "urgent": {
+      "role": "fixed",
+      "why": "Settable via the URG pointer, but non-zero values are conspicuous.",
+      "citation": "Pierazzi et al., IEEE S&P 2020, pp. 1332-1349",
+      "support": "synthesis"
+    },
+    "hot": {
+      "role": "fixed",
+      "why": "The payload decides how many hot indicators the session touches.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_failed_logins": {
+      "role": "fixed",
+      "why": "This is the guess_passwd signal itself; zeroing it removes the attack.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "logged_in": {
+      "role": "fixed",
+      "why": "Whether the login succeeded follows from the credentials the payload carries.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_compromised": {
+      "role": "fixed",
+      "why": "Counted from compromised-condition indicators the payload triggers.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "root_shell": {
+      "role": "fixed",
+      "why": "Whether a root shell was obtained is the u2r payload's own result.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "su_attempted": {
+      "role": "fixed",
+      "why": "Whether `su root` was attempted is part of the payload.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_root": {
+      "role": "fixed",
+      "why": "Counted from root accesses the payload performs.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_file_creations": {
+      "role": "fixed",
+      "why": "Counted from file-creation operations the payload performs.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_shells": {
+      "role": "fixed",
+      "why": "Counted from shell prompts the payload obtains.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_access_files": {
+      "role": "fixed",
+      "why": "Counted from accesses to access-control files the payload performs.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "num_outbound_cmds": {
+      "role": "fixed",
+      "why": "Degenerate: identically zero, so it carries no information to perturb.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "is_host_login": {
+      "role": "fixed",
+      "why": "Whether the login belongs to the host list is a property of the account used.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "is_guest_login": {
+      "role": "fixed",
+      "why": "Whether the login is a guest account is a property of the account used.",
+      "citation": "Lin, Shi, Xue, IDSGAN, PAKDD 2022, arXiv:1809.02077 (Table 1, verified)",
+      "support": "cited"
+    },
+    "count": {
+      "role": "derived",
+      "why": "Connections to the same host in a fixed 2 s window; falls as the attacker slows down.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "srv_count": {
+      "role": "derived",
+      "why": "Connections to the same service in a fixed 2 s window; falls as the attacker slows down.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "serror_rate": {
+      "role": "derived",
+      "why": "SYN-error ratio over the 2 s same-host window; tied to `flag`.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "srv_serror_rate": {
+      "role": "derived",
+      "why": "SYN-error ratio over the 2 s same-service window; tied to `flag`.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "rerror_rate": {
+      "role": "derived",
+      "why": "REJ-error ratio over the 2 s same-host window; tied to `flag`.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "srv_rerror_rate": {
+      "role": "derived",
+      "why": "REJ-error ratio over the 2 s same-service window; tied to `flag`.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "same_srv_rate": {
+      "role": "derived",
+      "why": "Same-service share of the 2 s same-host window; moves only through service spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "diff_srv_rate": {
+      "role": "derived",
+      "why": "Different-service share of the 2 s same-host window; moves only through service spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "srv_diff_host_rate": {
+      "role": "derived",
+      "why": "Different-host share of the 2 s same-service window; rises with host spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "role_by_category": {
+        "dos": "fixed"
+      }
+    },
+    "dst_host_count": {
+      "role": "derived",
+      "why": "Counted over 100 connections to the same host, a window built to defeat a slow attacker.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_srv_count": {
+      "role": "derived",
+      "why": "Counted over 100 connections to the same service, so slowing down does not move it.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_same_srv_rate": {
+      "role": "derived",
+      "why": "Same-service share of the 100-connection host window; moves through service spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_diff_srv_rate": {
+      "role": "derived",
+      "why": "Different-service share of the 100-connection host window; moves through service spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_same_src_port_rate": {
+      "role": "derived",
+      "why": "Same-source-port share of the 100-connection host window; falls under randomisation.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_srv_diff_host_rate": {
+      "role": "derived",
+      "why": "Different-host share of the 100-connection service window; rises with host spread.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_serror_rate": {
+      "role": "derived",
+      "why": "SYN-error ratio over the 100-connection host window; follows from the outcomes.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_srv_serror_rate": {
+      "role": "derived",
+      "why": "SYN-error ratio over the 100-connection service window; follows from the outcomes.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_rerror_rate": {
+      "role": "derived",
+      "why": "REJ-error ratio over the 100-connection host window; follows from the outcomes.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    },
+    "dst_host_srv_rerror_rate": {
+      "role": "derived",
+      "why": "REJ-error ratio over the 100-connection service window; follows from the outcomes.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis"
+    }
+  },
+  "feature_groups": {
+    "time_based": [
+      "count",
+      "srv_count",
+      "serror_rate",
+      "srv_serror_rate",
+      "rerror_rate",
+      "srv_rerror_rate",
+      "same_srv_rate",
+      "diff_srv_rate",
+      "srv_diff_host_rate"
+    ],
+    "host_based": [
+      "dst_host_count",
+      "dst_host_srv_count",
+      "dst_host_same_srv_rate",
+      "dst_host_diff_srv_rate",
+      "dst_host_same_src_port_rate",
+      "dst_host_srv_diff_host_rate",
+      "dst_host_serror_rate",
+      "dst_host_srv_serror_rate",
+      "dst_host_rerror_rate",
+      "dst_host_srv_rerror_rate"
+    ],
+    "content": [
+      "hot",
+      "num_failed_logins",
+      "logged_in",
+      "num_compromised",
+      "root_shell",
+      "su_attempted",
+      "num_root",
+      "num_file_creations",
+      "num_shells",
+      "num_access_files",
+      "is_host_login",
+      "is_guest_login"
+    ]
+  },
+  "behaviour_knobs": {
+    "inter_connection_interval": {
+      "description": "Seconds between the attacker's successive connections; the report's lambda.",
+      "direction": "increase_only",
+      "rationale": "Counts over a fixed 2 s window fall with the rate; ratios over the same window do not, they dilute toward the ambient background; the 100-connection host windows were built precisely to stay invariant to this.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "effects": {
+        "count": {
+          "direction": "decrease",
+          "basis": "raw count in a fixed 2 s window"
+        },
+        "srv_count": {
+          "direction": "decrease",
+          "basis": "raw count in a fixed 2 s window"
+        },
+        "same_srv_rate": {
+          "direction": "dilute_toward_background",
+          "drift": "decrease",
+          "basis": "ratio over the 2 s window"
+        },
+        "diff_srv_rate": {
+          "direction": "dilute_toward_background",
+          "drift": "increase",
+          "basis": "ratio over the 2 s window"
+        },
+        "serror_rate": {
+          "direction": "dilute_toward_background",
+          "basis": "ratio over the 2 s window"
+        },
+        "srv_serror_rate": {
+          "direction": "dilute_toward_background",
+          "basis": "ratio over the 2 s window"
+        },
+        "rerror_rate": {
+          "direction": "dilute_toward_background",
+          "basis": "ratio over the 2 s window"
+        },
+        "srv_rerror_rate": {
+          "direction": "dilute_toward_background",
+          "basis": "ratio over the 2 s window"
+        },
+        "srv_diff_host_rate": {
+          "direction": "unspecified",
+          "basis": "the report's \u00a74 does not give this ratio a direction"
+        },
+        "dst_host_count": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_srv_count": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_same_srv_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_diff_srv_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_same_src_port_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_srv_diff_host_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_serror_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_srv_serror_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_rerror_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        },
+        "dst_host_srv_rerror_rate": {
+          "direction": "near_invariant",
+          "basis": "window is 100 connections, not a time span"
+        }
+      }
+    },
+    "host_spread": {
+      "description": "How many distinct destination hosts the attacker's connections are spread over; the report's H.",
+      "direction": "increase_only",
+      "rationale": "Spreading the same work over more hosts thins every per-host window and raises the different-host shares.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "effects": {
+        "count": {
+          "direction": "decrease",
+          "basis": "fewer connections land on any one host"
+        },
+        "srv_count": {
+          "direction": "unchanged",
+          "basis": "the same service is still targeted everywhere"
+        },
+        "srv_diff_host_rate": {
+          "direction": "increase",
+          "basis": "same-service connections now reach more hosts"
+        },
+        "dst_host_count": {
+          "direction": "decrease",
+          "basis": "per-target 100-connection host window thins"
+        },
+        "dst_host_srv_count": {
+          "direction": "decrease",
+          "basis": "per-target 100-connection service window thins"
+        },
+        "dst_host_srv_diff_host_rate": {
+          "direction": "increase",
+          "basis": "same-service connections now reach more hosts"
+        }
+      }
+    },
+    "service_spread": {
+      "description": "How many distinct services or destination ports the attacker touches; the report's S.",
+      "direction": "increase_only",
+      "rationale": "Touching more services moves weight out of the same-service share and into the different-service share.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "effects": {
+        "same_srv_rate": {
+          "direction": "decrease",
+          "basis": "same-service share of the 2 s window"
+        },
+        "diff_srv_rate": {
+          "direction": "increase",
+          "basis": "different-service share of the 2 s window"
+        },
+        "dst_host_same_srv_rate": {
+          "direction": "decrease",
+          "basis": "same-service share of the 100-connection host window"
+        },
+        "dst_host_diff_srv_rate": {
+          "direction": "increase",
+          "basis": "different-service share of the 100-connection host window"
+        }
+      }
+    },
+    "source_port_reuse": {
+      "description": "How often the attacker reuses the same source port; lowering it means source-port randomisation.",
+      "direction": "decrease_only",
+      "rationale": "The 100-connection host window records the same-source-port share, so randomising the port lowers it.",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "support": "synthesis",
+      "effects": {
+        "dst_host_same_src_port_rate": {
+          "direction": "decrease",
+          "basis": "same-source-port share of the 100-connection host window"
+        }
+      }
+    },
+    "byte_padding": {
+      "description": "Junk data appended to the attacker's own request.",
+      "direction": "increase_only",
+      "rationale": "Adding random junk data does not alter the underlying logic; excessive increases generate anomalous Flows.",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited",
+      "effects": {
+        "src_bytes": {
+          "direction": "increase",
+          "basis": "the attacker writes these bytes itself"
+        }
+      },
+      "bounded_by": "direct_levers.src_bytes"
+    },
+    "added_latency": {
+      "description": "Extra delay held inside a single connection.",
+      "direction": "increase_only",
+      "rationale": "Evasion by increasing flow duration through a small latency; flow collectors cap the maximum duration.",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited",
+      "effects": {
+        "duration": {
+          "direction": "increase",
+          "basis": "the attacker holds the connection open"
+        }
+      },
+      "bounded_by": "direct_levers.duration"
+    }
+  },
+  "couplings": [
+    {
+      "id": "same_srv_partition",
+      "statement": "same_srv_rate + diff_srv_rate == 1",
+      "features": [
+        "same_srv_rate",
+        "diff_srv_rate"
+      ],
+      "unit": "rate",
+      "rounding_slack": 0.01,
+      "predicted_by": "research report \u00a74, hard couplings",
+      "support": "synthesis",
+      "verdict": "rejected",
+      "enforce": false,
+      "tolerance": null,
+      "note": "Rejected. The two rates do not partition one window: `same_srv_rate` is the same-service share of the 2 s same-host window while `diff_srv_rate` behaves as a count of distinct other services over the same denominator, so the sum is usually far below 1 and sometimes above it. An attacker model must not treat `diff_srv_rate` as `1 - same_srv_rate`.",
+      "measured": {
+        "pool": {
+          "flows": 125973,
+          "skipped_undefined": 0,
+          "violations_above_slack": 47215,
+          "violation_rate_above_slack": 0.374803,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.9,
+            "p99": 0.93,
+            "max": 1.0
+          }
+        },
+        "test": {
+          "flows": 22544,
+          "skipped_undefined": 0,
+          "violations_above_slack": 5930,
+          "violation_rate_above_slack": 0.263041,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.88,
+            "p99": 0.93,
+            "max": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "dst_host_srv_partition",
+      "statement": "dst_host_same_srv_rate + dst_host_diff_srv_rate == 1",
+      "features": [
+        "dst_host_same_srv_rate",
+        "dst_host_diff_srv_rate"
+      ],
+      "unit": "rate",
+      "rounding_slack": 0.01,
+      "predicted_by": "research report \u00a74, hard couplings",
+      "support": "synthesis",
+      "verdict": "rejected",
+      "enforce": false,
+      "tolerance": null,
+      "note": "Rejected, and more severely than its 2 s twin: the two host-based rates are computed over two different 100-connection windows (same host, same service), so they have no reason to sum to 1.",
+      "measured": {
+        "pool": {
+          "flows": 125973,
+          "skipped_undefined": 0,
+          "violations_above_slack": 76202,
+          "violation_rate_above_slack": 0.604907,
+          "residual": {
+            "p50": 0.24,
+            "p90": 0.91,
+            "p99": 0.94,
+            "max": 1.0
+          }
+        },
+        "test": {
+          "flows": 22544,
+          "skipped_undefined": 0,
+          "violations_above_slack": 12159,
+          "violation_rate_above_slack": 0.539345,
+          "residual": {
+            "p50": 0.01,
+            "p90": 0.9,
+            "p99": 0.95,
+            "max": 1.0
+          }
+        }
+      }
+    },
+    {
+      "id": "dst_host_srv_count_ordering",
+      "statement": "dst_host_srv_count <= dst_host_count",
+      "features": [
+        "dst_host_srv_count",
+        "dst_host_count"
+      ],
+      "unit": "connections",
+      "rounding_slack": 0.0,
+      "predicted_by": "research report \u00a74, hard couplings",
+      "support": "synthesis",
+      "verdict": "rejected",
+      "enforce": false,
+      "tolerance": null,
+      "note": "Rejected. The two counts are not nested: `dst_host_count` counts inside the last 100 connections to the same host and `dst_host_srv_count` inside the last 100 connections to the same service. Verified against the raw KDDTrain+ lines.",
+      "measured": {
+        "pool": {
+          "flows": 125973,
+          "skipped_undefined": 0,
+          "violations_above_slack": 34670,
+          "violation_rate_above_slack": 0.275218,
+          "residual": {
+            "p50": 0.0,
+            "p90": 209.0,
+            "p99": 253.0,
+            "max": 254.0
+          }
+        },
+        "test": {
+          "flows": 22544,
+          "skipped_undefined": 0,
+          "violations_above_slack": 5289,
+          "violation_rate_above_slack": 0.234608,
+          "residual": {
+            "p50": 0.0,
+            "p90": 194.0,
+            "p99": 252.0,
+            "max": 254.0
+          }
+        }
+      }
+    },
+    {
+      "id": "srv_count_ordering",
+      "statement": "srv_count <= count",
+      "features": [
+        "srv_count",
+        "count"
+      ],
+      "unit": "connections",
+      "rounding_slack": 0.0,
+      "predicted_by": "this project, the 2 s mirror of the ordering the report predicts for the 100-connection windows",
+      "support": "synthesis",
+      "verdict": "rejected",
+      "enforce": false,
+      "tolerance": null,
+      "note": "Rejected, for the same reason as its host-based twin: `count` is a same-host window and `srv_count` a same-service one.",
+      "measured": {
+        "pool": {
+          "flows": 125973,
+          "skipped_undefined": 0,
+          "violations_above_slack": 27836,
+          "violation_rate_above_slack": 0.220968,
+          "residual": {
+            "p50": 0.0,
+            "p90": 6.0,
+            "p99": 80.0,
+            "max": 510.0
+          }
+        },
+        "test": {
+          "flows": 22544,
+          "skipped_undefined": 0,
+          "violations_above_slack": 4814,
+          "violation_rate_above_slack": 0.213538,
+          "residual": {
+            "p50": 0.0,
+            "p90": 4.0,
+            "p99": 73.0,
+            "max": 154.0
+          }
+        }
+      }
+    },
+    {
+      "id": "dst_host_same_srv_rate_ratio",
+      "statement": "dst_host_same_srv_rate == min(1, dst_host_srv_count / dst_host_count)",
+      "features": [
+        "dst_host_same_srv_rate",
+        "dst_host_srv_count",
+        "dst_host_count"
+      ],
+      "unit": "rate",
+      "rounding_slack": 0.01,
+      "predicted_by": "research report \u00a74, hard couplings",
+      "support": "synthesis",
+      "verdict": "rejected",
+      "enforce": false,
+      "tolerance": null,
+      "note": "Rejected as a hard constraint although it very nearly holds: the residual sits inside the rounding slack for most Flows but its p99 is two orders of magnitude outside it, again because numerator and denominator come from two different windows.",
+      "measured": {
+        "pool": {
+          "flows": 125970,
+          "skipped_undefined": 3,
+          "violations_above_slack": 8711,
+          "violation_rate_above_slack": 0.069151,
+          "residual": {
+            "p50": 0.001373,
+            "p90": 0.004706,
+            "p99": 0.531875,
+            "max": 0.99
+          }
+        },
+        "test": {
+          "flows": 22543,
+          "skipped_undefined": 1,
+          "violations_above_slack": 1411,
+          "violation_rate_above_slack": 0.062591,
+          "residual": {
+            "p50": 0.001176,
+            "p90": 0.004706,
+            "p99": 0.65,
+            "max": 0.98
+          }
+        }
+      }
+    },
+    {
+      "id": "same_srv_rate_ratio",
+      "statement": "same_srv_rate == min(1, srv_count / count)",
+      "features": [
+        "same_srv_rate",
+        "srv_count",
+        "count"
+      ],
+      "unit": "rate",
+      "rounding_slack": 0.01,
+      "predicted_by": "this project, fitted after the report's four predictions were measured",
+      "support": "synthesis",
+      "verdict": "accepted",
+      "enforce": true,
+      "tolerance": 0.005,
+      "note": "Accepted: the only rate identity the Pool supports. It is the usable replacement for the rejected partition, and it is what forces `same_srv_rate` to move whenever behaviour moves `count` or `srv_count`. Weaker on KDDTest+, see measured.test.",
+      "measured": {
+        "pool": {
+          "flows": 125960,
+          "skipped_undefined": 13,
+          "violations_above_slack": 987,
+          "violation_rate_above_slack": 0.007836,
+          "violations_above_tolerance": 1385,
+          "violation_rate_above_tolerance": 0.010996,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.003796,
+            "p99": 0.005,
+            "max": 0.88
+          }
+        },
+        "test": {
+          "flows": 22543,
+          "skipped_undefined": 1,
+          "violations_above_slack": 601,
+          "violation_rate_above_slack": 0.02666,
+          "violations_above_tolerance": 645,
+          "violation_rate_above_tolerance": 0.028612,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.003437,
+            "p99": 0.5,
+            "max": 0.8
+          }
+        }
+      }
+    },
+    {
+      "id": "num_outbound_cmds_degenerate",
+      "statement": "num_outbound_cmds == 0",
+      "features": [
+        "num_outbound_cmds"
+      ],
+      "unit": "connections",
+      "rounding_slack": 0.0,
+      "predicted_by": "research report \u00a74, open question 4",
+      "support": "synthesis",
+      "verdict": "accepted",
+      "enforce": true,
+      "tolerance": 0.0,
+      "note": "Accepted exactly, in the Pool and in KDDTest+. The feature carries no information, so perturbing it is a wasted move.",
+      "measured": {
+        "pool": {
+          "flows": 125973,
+          "skipped_undefined": 0,
+          "violations_above_slack": 0,
+          "violation_rate_above_slack": 0.0,
+          "violations_above_tolerance": 0,
+          "violation_rate_above_tolerance": 0.0,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          }
+        },
+        "test": {
+          "flows": 22544,
+          "skipped_undefined": 0,
+          "violations_above_slack": 0,
+          "violation_rate_above_slack": 0.0,
+          "violations_above_tolerance": 0,
+          "violation_rate_above_tolerance": 0.0,
+          "residual": {
+            "p50": 0.0,
+            "p90": 0.0,
+            "p99": 0.0,
+            "max": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "symbolic_couplings": {
+    "flag_fixes_error_rates": {
+      "statement": "`flag` fixes the error-rate family: a Flow cannot keep flag=S0 and drop serror_rate, nor keep REJ and drop rerror.",
+      "features": [
+        "flag",
+        "serror_rate",
+        "srv_serror_rate",
+        "rerror_rate",
+        "srv_rerror_rate"
+      ],
+      "support": "synthesis",
+      "citation": "KDD Cup 1999 task description (Lee & Stolfo, ACM TISSEC 3(4), 2000)",
+      "by_flag": {
+        "OTH": {
+          "flows": 46,
+          "serror_rate_above_half": 0.0,
+          "rerror_rate_above_half": 0.0
+        },
+        "REJ": {
+          "flows": 11233,
+          "serror_rate_above_half": 0.0001,
+          "rerror_rate_above_half": 0.9954
+        },
+        "RSTO": {
+          "flows": 1562,
+          "serror_rate_above_half": 0.0013,
+          "rerror_rate_above_half": 0.9629
+        },
+        "RSTOS0": {
+          "flows": 103,
+          "serror_rate_above_half": 0.7961,
+          "rerror_rate_above_half": 0.1942
+        },
+        "RSTR": {
+          "flows": 2421,
+          "serror_rate_above_half": 0.0,
+          "rerror_rate_above_half": 0.9488
+        },
+        "S0": {
+          "flows": 34851,
+          "serror_rate_above_half": 0.9879,
+          "rerror_rate_above_half": 0.003
+        },
+        "S1": {
+          "flows": 365,
+          "serror_rate_above_half": 0.6493,
+          "rerror_rate_above_half": 0.0027
+        },
+        "S2": {
+          "flows": 127,
+          "serror_rate_above_half": 0.7087,
+          "rerror_rate_above_half": 0.0157
+        },
+        "S3": {
+          "flows": 49,
+          "serror_rate_above_half": 0.4694,
+          "rerror_rate_above_half": 0.0204
+        },
+        "SF": {
+          "flows": 74945,
+          "serror_rate_above_half": 0.0018,
+          "rerror_rate_above_half": 0.0008
+        },
+        "SH": {
+          "flows": 271,
+          "serror_rate_above_half": 0.9852,
+          "rerror_rate_above_half": 0.0
+        }
+      }
+    }
+  },
+  "symbolic_combinations": {
+    "rare_below_flows": 10,
+    "by_protocol_type": {
+      "icmp": {
+        "flows": 8291,
+        "service": {
+          "common": {
+            "eco_i": 4586,
+            "ecr_i": 3077,
+            "urp_i": 602,
+            "urh_i": 10
+          },
+          "rare": {
+            "red_i": 8,
+            "tim_i": 8
+          }
+        },
+        "flag": {
+          "common": {
+            "SF": 8291
+          },
+          "rare": {}
+        }
+      },
+      "tcp": {
+        "flows": 102689,
+        "service": {
+          "common": {
+            "http": 40338,
+            "private": 18562,
+            "smtp": 7313,
+            "ftp_data": 6860,
+            "telnet": 2353,
+            "other": 1871,
+            "finger": 1767,
+            "ftp": 1754,
+            "auth": 955,
+            "Z39_50": 862,
+            "uucp": 780,
+            "courier": 734,
+            "bgp": 710,
+            "whois": 693,
+            "uucp_path": 689,
+            "iso_tsap": 687,
+            "time": 654,
+            "imap4": 647,
+            "nnsp": 630,
+            "vmnet": 617,
+            "domain": 569,
+            "ctf": 563,
+            "csnet_ns": 545,
+            "supdup": 544,
+            "discard": 538,
+            "http_443": 530,
+            "daytime": 521,
+            "gopher": 518,
+            "efs": 485,
+            "systat": 477,
+            "link": 475,
+            "exec": 474,
+            "hostnames": 460,
+            "name": 451,
+            "mtp": 439,
+            "echo": 434,
+            "klogin": 433,
+            "login": 429,
+            "ldap": 410,
+            "netbios_dgm": 405,
+            "sunrpc": 381,
+            "netbios_ssn": 362,
+            "netstat": 360,
+            "netbios_ns": 347,
+            "ssh": 311,
+            "kshell": 299,
+            "nntp": 296,
+            "pop_3": 264,
+            "sql_net": 245,
+            "IRC": 187,
+            "rje": 86,
+            "pop_2": 78,
+            "remote_job": 78,
+            "X11": 73,
+            "printer": 69,
+            "shell": 65
+          },
+          "rare": {
+            "pm_dump": 5,
+            "aol": 2,
+            "harvest": 2,
+            "http_8001": 2,
+            "http_2784": 1
+          }
+        },
+        "flag": {
+          "common": {
+            "SF": 51661,
+            "S0": 34851,
+            "REJ": 11233,
+            "RSTR": 2421,
+            "RSTO": 1562,
+            "S1": 365,
+            "SH": 271,
+            "S2": 127,
+            "RSTOS0": 103,
+            "S3": 49,
+            "OTH": 46
+          },
+          "rare": {}
+        }
+      },
+      "udp": {
+        "flows": 14993,
+        "service": {
+          "common": {
+            "domain_u": 9043,
+            "private": 3291,
+            "other": 2488,
+            "ntp_u": 168
+          },
+          "rare": {
+            "tftp_u": 3
+          }
+        },
+        "flag": {
+          "common": {
+            "SF": 14993
+          },
+          "rare": {}
+        }
+      }
+    },
+    "services_on_more_than_one_protocol": [
+      "other",
+      "private"
+    ],
+    "services_in_test_but_not_in_pool": []
+  },
+  "direct_levers": {
+    "duration": {
+      "direction": "increase_only",
+      "unit": "seconds",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited",
+      "plausible_ceiling": "p99",
+      "hard_ceiling": "max",
+      "by_category": {
+        "normal": {
+          "flows": 67343,
+          "min": 0.0,
+          "p50": 0.0,
+          "p90": 1.0,
+          "p99": 6381.0,
+          "max": 40504.0
+        },
+        "dos": {
+          "flows": 45927,
+          "min": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p99": 0.0,
+          "max": 14.0
+        },
+        "probe": {
+          "flows": 11656,
+          "min": 0.0,
+          "p50": 0.0,
+          "p90": 6.0,
+          "p99": 40142.0,
+          "max": 42908.0
+        },
+        "r2l": {
+          "flows": 995,
+          "min": 0.0,
+          "p50": 0.0,
+          "p90": 134.0,
+          "p99": 12546.0,
+          "max": 15168.0
+        },
+        "u2r": {
+          "flows": 52,
+          "min": 0.0,
+          "p50": 47.0,
+          "p90": 179.0,
+          "p99": 321.0,
+          "max": 708.0
+        }
+      }
+    },
+    "src_bytes": {
+      "direction": "increase_only",
+      "unit": "bytes",
+      "citation": "Apruzzese et al., IEEE TETCI 4(4), 2020, pp. 427-439",
+      "support": "cited",
+      "plausible_ceiling": "p99",
+      "hard_ceiling": "max",
+      "by_category": {
+        "normal": {
+          "flows": 67343,
+          "min": 0.0,
+          "p50": 233.0,
+          "p90": 1182.0,
+          "p99": 16787.0,
+          "max": 89581520.0
+        },
+        "dos": {
+          "flows": 45927,
+          "min": 0.0,
+          "p50": 0.0,
+          "p90": 28.0,
+          "p99": 54540.0,
+          "max": 54540.0
+        },
+        "probe": {
+          "flows": 11656,
+          "min": 0.0,
+          "p50": 1.0,
+          "p90": 8.0,
+          "p99": 215.0,
+          "max": 1379963888.0
+        },
+        "r2l": {
+          "flows": 995,
+          "min": 0.0,
+          "p50": 334.0,
+          "p90": 1269.0,
+          "p99": 5135678.0,
+          "max": 5135678.0
+        },
+        "u2r": {
+          "flows": 52,
+          "min": 0.0,
+          "p50": 277.0,
+          "p90": 2402.0,
+          "p99": 2628.0,
+          "max": 6274.0
+        }
+      }
+    }
+  },
+  "category_signatures": {
+    "r2l": {
+      "flows": 995,
+      "content_features_checked": [
+        "num_failed_logins",
+        "hot",
+        "is_guest_login",
+        "logged_in",
+        "num_file_creations",
+        "num_compromised",
+        "root_shell",
+        "num_access_files"
+      ],
+      "by_attack_name": {
+        "ftp_write": {
+          "flows": 8,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  8
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.25,
+              "top_values": [
+                [
+                  "0",
+                  6
+                ],
+                [
+                  "2",
+                  2
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.25,
+              "top_values": [
+                [
+                  "0",
+                  6
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.75,
+              "top_values": [
+                [
+                  "1",
+                  6
+                ],
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.25,
+              "top_values": [
+                [
+                  "0",
+                  6
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.125,
+              "top_values": [
+                [
+                  "0",
+                  7
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  8
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.375,
+              "top_values": [
+                [
+                  "0",
+                  5
+                ],
+                [
+                  "1",
+                  3
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "ftp_data",
+              4
+            ],
+            [
+              "ftp",
+              2
+            ],
+            [
+              "login",
+              2
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              8
+            ]
+          ],
+          "duration": {
+            "p50": 26.0,
+            "p90": 67.0,
+            "p99": 134.0,
+            "max": 134.0
+          },
+          "src_bytes": {
+            "p50": 116.0,
+            "p90": 613.0,
+            "p99": 676.0,
+            "max": 676.0
+          }
+        },
+        "guess_passwd": {
+          "flows": 53,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.9811,
+              "top_values": [
+                [
+                  "1",
+                  51
+                ],
+                [
+                  "0",
+                  1
+                ],
+                [
+                  "5",
+                  1
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.9811,
+              "top_values": [
+                [
+                  "1",
+                  48
+                ],
+                [
+                  "2",
+                  4
+                ],
+                [
+                  "0",
+                  1
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.0189,
+              "top_values": [
+                [
+                  "0",
+                  52
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.0189,
+              "top_values": [
+                [
+                  "0",
+                  52
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  53
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  53
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  53
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  53
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "telnet",
+              53
+            ]
+          ],
+          "flag": [
+            [
+              "RSTO",
+              45
+            ],
+            [
+              "RSTR",
+              4
+            ],
+            [
+              "S3",
+              2
+            ]
+          ],
+          "duration": {
+            "p50": 0.0,
+            "p90": 0.0,
+            "p99": 60.0,
+            "max": 60.0
+          },
+          "src_bytes": {
+            "p50": 126.0,
+            "p90": 126.0,
+            "p99": 126.0,
+            "max": 126.0
+          }
+        },
+        "imap": {
+          "flows": 11,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  11
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.1818,
+              "top_values": [
+                [
+                  "0",
+                  9
+                ],
+                [
+                  "2",
+                  2
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  11
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.0909,
+              "top_values": [
+                [
+                  "0",
+                  10
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  11
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0909,
+              "top_values": [
+                [
+                  "0",
+                  10
+                ],
+                [
+                  "16",
+                  1
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  11
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  11
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "imap4",
+              11
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              6
+            ],
+            [
+              "SH",
+              4
+            ],
+            [
+              "S1",
+              1
+            ]
+          ],
+          "duration": {
+            "p50": 0.0,
+            "p90": 31.0,
+            "p99": 41.0,
+            "max": 41.0
+          },
+          "src_bytes": {
+            "p50": 0.0,
+            "p90": 1345.0,
+            "p99": 1492.0,
+            "max": 1492.0
+          }
+        },
+        "multihop": {
+          "flows": 7,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  7
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.5714,
+              "top_values": [
+                [
+                  "0",
+                  3
+                ],
+                [
+                  "1",
+                  1
+                ],
+                [
+                  "15",
+                  1
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.2857,
+              "top_values": [
+                [
+                  "0",
+                  5
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.5714,
+              "top_values": [
+                [
+                  "1",
+                  4
+                ],
+                [
+                  "0",
+                  3
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.5714,
+              "top_values": [
+                [
+                  "0",
+                  3
+                ],
+                [
+                  "1",
+                  2
+                ],
+                [
+                  "4",
+                  2
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.2857,
+              "top_values": [
+                [
+                  "0",
+                  5
+                ],
+                [
+                  "22",
+                  1
+                ],
+                [
+                  "38",
+                  1
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.2857,
+              "top_values": [
+                [
+                  "0",
+                  5
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.1429,
+              "top_values": [
+                [
+                  "0",
+                  6
+                ],
+                [
+                  "2",
+                  1
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "ftp_data",
+              3
+            ],
+            [
+              "ftp",
+              2
+            ],
+            [
+              "telnet",
+              2
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              7
+            ]
+          ],
+          "duration": {
+            "p50": 179.0,
+            "p90": 198.0,
+            "p99": 718.0,
+            "max": 718.0
+          },
+          "src_bytes": {
+            "p50": 119.0,
+            "p90": 866.0,
+            "p99": 1412.0,
+            "max": 1412.0
+          }
+        },
+        "phf": {
+          "flows": 4,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  4
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 1.0,
+              "top_values": [
+                [
+                  "2",
+                  4
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  4
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 1.0,
+              "top_values": [
+                [
+                  "1",
+                  4
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  4
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  4
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 1.0,
+              "top_values": [
+                [
+                  "1",
+                  4
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 1.0,
+              "top_values": [
+                [
+                  "1",
+                  4
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "http",
+              4
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              4
+            ]
+          ],
+          "duration": {
+            "p50": 6.0,
+            "p90": 12.0,
+            "p99": 12.0,
+            "max": 12.0
+          },
+          "src_bytes": {
+            "p50": 51.0,
+            "p90": 51.0,
+            "p99": 51.0,
+            "max": 51.0
+          }
+        },
+        "spy": {
+          "flows": 2,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.5,
+              "top_values": [
+                [
+                  "0",
+                  1
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.5,
+              "top_values": [
+                [
+                  "0",
+                  1
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  2
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.5,
+              "top_values": [
+                [
+                  "0",
+                  1
+                ],
+                [
+                  "1",
+                  1
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "telnet",
+              2
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              2
+            ]
+          ],
+          "duration": {
+            "p50": 299.0,
+            "p90": 337.0,
+            "p99": 337.0,
+            "max": 337.0
+          },
+          "src_bytes": {
+            "p50": 112.0,
+            "p90": 237.0,
+            "p99": 237.0,
+            "max": 237.0
+          }
+        },
+        "warezclient": {
+          "flows": 890,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  890
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.4022,
+              "top_values": [
+                [
+                  "0",
+                  532
+                ],
+                [
+                  "28",
+                  273
+                ],
+                [
+                  "3",
+                  16
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.3438,
+              "top_values": [
+                [
+                  "0",
+                  584
+                ],
+                [
+                  "1",
+                  306
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 1.0,
+              "top_values": [
+                [
+                  "1",
+                  890
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  890
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  890
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  890
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  890
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "ftp_data",
+              579
+            ],
+            [
+              "ftp",
+              306
+            ],
+            [
+              "other",
+              5
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              886
+            ],
+            [
+              "RSTO",
+              1
+            ],
+            [
+              "RSTR",
+              1
+            ]
+          ],
+          "duration": {
+            "p50": 0.0,
+            "p90": 5033.0,
+            "p99": 15149.0,
+            "max": 15168.0
+          },
+          "src_bytes": {
+            "p50": 334.0,
+            "p90": 7045.0,
+            "p99": 5135678.0,
+            "max": 5135678.0
+          }
+        },
+        "warezmaster": {
+          "flows": 20,
+          "content": {
+            "num_failed_logins": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  20
+                ]
+              ]
+            },
+            "hot": {
+              "nonzero_rate": 0.05,
+              "top_values": [
+                [
+                  "0",
+                  19
+                ],
+                [
+                  "18",
+                  1
+                ]
+              ]
+            },
+            "is_guest_login": {
+              "nonzero_rate": 0.1,
+              "top_values": [
+                [
+                  "0",
+                  18
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "logged_in": {
+              "nonzero_rate": 0.1,
+              "top_values": [
+                [
+                  "0",
+                  18
+                ],
+                [
+                  "1",
+                  2
+                ]
+              ]
+            },
+            "num_file_creations": {
+              "nonzero_rate": 0.1,
+              "top_values": [
+                [
+                  "0",
+                  18
+                ],
+                [
+                  "1",
+                  1
+                ],
+                [
+                  "21",
+                  1
+                ]
+              ]
+            },
+            "num_compromised": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  20
+                ]
+              ]
+            },
+            "root_shell": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  20
+                ]
+              ]
+            },
+            "num_access_files": {
+              "nonzero_rate": 0.0,
+              "top_values": [
+                [
+                  "0",
+                  20
+                ]
+              ]
+            }
+          },
+          "service": [
+            [
+              "ftp_data",
+              18
+            ],
+            [
+              "ftp",
+              2
+            ]
+          ],
+          "flag": [
+            [
+              "SF",
+              20
+            ]
+          ],
+          "duration": {
+            "p50": 9.0,
+            "p90": 10.0,
+            "p99": 156.0,
+            "max": 156.0
+          },
+          "src_bytes": {
+            "p50": 0.0,
+            "p90": 0.0,
+            "p99": 950.0,
+            "max": 950.0
+          }
+        }
+      }
+    },
+    "dos": {
+      "flows": 45927,
+      "content": {
+        "hot": {
+          "nonzero_rate": 0.0206,
+          "top_values": [
+            [
+              "0",
+              44980
+            ],
+            [
+              "2",
+              881
+            ],
+            [
+              "1",
+              64
+            ]
+          ]
+        },
+        "num_failed_logins": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "logged_in": {
+          "nonzero_rate": 0.0208,
+          "top_values": [
+            [
+              "0",
+              44970
+            ],
+            [
+              "1",
+              957
+            ]
+          ]
+        },
+        "num_compromised": {
+          "nonzero_rate": 0.0192,
+          "top_values": [
+            [
+              "0",
+              45044
+            ],
+            [
+              "1",
+              883
+            ]
+          ]
+        },
+        "root_shell": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "su_attempted": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "num_root": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "num_file_creations": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "num_shells": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "num_access_files": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "is_host_login": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        },
+        "is_guest_login": {
+          "nonzero_rate": 0.0,
+          "top_values": [
+            [
+              "0",
+              45927
+            ]
+          ]
+        }
+      },
+      "content_features_identically_zero": [
+        "is_guest_login",
+        "is_host_login",
+        "num_access_files",
+        "num_failed_logins",
+        "num_file_creations",
+        "num_root",
+        "num_shells",
+        "root_shell",
+        "su_attempted"
+      ]
+    }
+  },
+  "information_free_features": {
+    "near_constant_threshold": 0.99,
+    "constant": [
+      {
+        "feature": "num_outbound_cmds",
+        "value": "0",
+        "share": 1.0,
+        "distinct_values": 1
+      }
+    ],
+    "near_constant": [
+      {
+        "feature": "land",
+        "value": "0",
+        "share": 0.999802,
+        "distinct_values": 2
+      },
+      {
+        "feature": "wrong_fragment",
+        "value": "0",
+        "share": 0.991347,
+        "distinct_values": 3
+      },
+      {
+        "feature": "urgent",
+        "value": "0",
+        "share": 0.999929,
+        "distinct_values": 4
+      },
+      {
+        "feature": "num_failed_logins",
+        "value": "0",
+        "share": 0.999032,
+        "distinct_values": 6
+      },
+      {
+        "feature": "root_shell",
+        "value": "0",
+        "share": 0.998658,
+        "distinct_values": 2
+      },
+      {
+        "feature": "su_attempted",
+        "value": "0",
+        "share": 0.999365,
+        "distinct_values": 3
+      },
+      {
+        "feature": "num_root",
+        "value": "0",
+        "share": 0.994848,
+        "distinct_values": 82
+      },
+      {
+        "feature": "num_file_creations",
+        "value": "0",
+        "share": 0.997722,
+        "distinct_values": 35
+      },
+      {
+        "feature": "num_shells",
+        "value": "0",
+        "share": 0.999627,
+        "distinct_values": 3
+      },
+      {
+        "feature": "num_access_files",
+        "value": "0",
+        "share": 0.997055,
+        "distinct_values": 10
+      },
+      {
+        "feature": "is_host_login",
+        "value": "0",
+        "share": 0.999992,
+        "distinct_values": 2
+      },
+      {
+        "feature": "is_guest_login",
+        "value": "0",
+        "share": 0.990577,
+        "distinct_values": 2
+      }
+    ]
+  },
+  "deviations_from_research_report": [
+    {
+      "subject": "urgent",
+      "report": "direct but implausible",
+      "model": "fixed",
+      "why": "The role vocabulary has no `implausible` value, and the report itself removes the feature by Pierazzi's plausibility constraint. The Pool agrees: `urgent` is zero in 99.99% of Flows, so any non-zero value is conspicuous."
+    },
+    {
+      "subject": "dst_bytes",
+      "report": "r2l: derived; dos: direct in botnet settings",
+      "model": "derived for every Category",
+      "why": "The botnet scope condition does not hold in NSL-KDD: dos here targets a third-party victim that decides its own response, so the attacker does not own the far endpoint."
+    },
+    {
+      "subject": "content features under dos",
+      "report": "IDSGAN Table 1 frees the content block for dos",
+      "model": "fixed for every Category",
+      "why": "Nine of the twelve content features are identically zero across every dos Flow of the Pool; writing non-zero values there asserts application-layer activity that never happened. Measured exceptions are recorded under category_signatures.dos."
+    },
+    {
+      "subject": "coupling identities",
+      "report": "\u00a74 predicts four hard couplings from the published definitions",
+      "model": "three of the four are rejected on the Pool's own evidence",
+      "why": "`count`/`srv_count` and `dst_host_count`/`dst_host_srv_count` are not nested: each pair is computed over two parallel windows (same host, same service). See couplings for the measured violation rates."
+    }
+  ],
+  "provenance": {
+    "fitted_on": "2026-09-23",
+    "script": "scripts/fit_mutations.py",
+    "dataset": "nsl-kdd",
+    "card": {
+      "path": "data/nsl-kdd/dataset.json",
+      "sha256": "9198210f92453f49956f89d63a3ef7538e70c6092af7c93fdbc5c9a74b02ee72"
+    },
+    "pool": {
+      "path": "data/nsl-kdd/pool.csv",
+      "sha256": "85e2b34baa01f2ce0737fe1c29a82ba23dec02296bfef5fe73cf10989f9affd4",
+      "flows": 125973
+    },
+    "test": {
+      "path": "data/nsl-kdd/test.csv",
+      "sha256": "d2e33265d8f4c9392584c7de26bf877ae2af98f3fe2281170a2b6da50b640f50",
+      "flows": 22544
+    },
+    "research_report": "dev-docs/research-evasion-constraints.md",
+    "findings": "dev-docs/empirical-constraints-findings.md"
+  }
+}
