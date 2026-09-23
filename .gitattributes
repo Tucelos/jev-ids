@@ -1,0 +1,3 @@
+# Byte-for-byte reproducibility: load_prompt and the run loop hash file BYTES, so a CRLF checkout on Windows
+# silently changes prompt_hash, the card hash and the split hash, and runs stop being comparable with upstream.
+* text=auto eol=lf

@@ -102,9 +102,13 @@ def split_header(config: Config, *extra: str) -> list[str]:
 
 
 def write_split(path: Path, header: Sequence[str], rows: Iterable[Sequence[object]]) -> None:
-    """Write a CSV with a header row: the shape every split and pool file shares."""
+    """Write a CSV with a header row: the shape every split and pool file shares.
+
+    Lines end in LF, not in `csv.writer`'s default CRLF: a Run hashes the bytes of the split file it judged into its `config.json`, and
+    git stores text blobs with LF, so a CRLF file on disk would hash differently from the very file a fresh clone checks out.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(header)
         writer.writerows(rows)
