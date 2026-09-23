@@ -32,13 +32,14 @@ from jev_ids.detectors import random_forest
 from jev_ids.detectors.isolation_forest import IsolationForestDetector
 from jev_ids.detectors.jev import JevDetector
 from jev_ids.detectors.llm import LLMDetector
+from jev_ids.detectors.offline import OfflineDetector
 from jev_ids.detectors.random_forest import RandomForestDetector
 from jev_ids.records import append_prediction, complete_prediction, read_predictions, write_config
 
 RESULTS_DIR = ROOT / "results"
 
 # The detectors share no base class; the run loop only needs `name`, `model`, `prompt_hash` and `predict`, which each of them has.
-Detector = JevDetector | LLMDetector | RandomForestDetector | IsolationForestDetector
+Detector = JevDetector | LLMDetector | RandomForestDetector | IsolationForestDetector | OfflineDetector
 
 
 @dataclass(frozen=True)
@@ -84,11 +85,15 @@ def build_detector(spec: RunSpec, config: Config) -> Detector:
     if spec.detector in ("llm:deepseek", "llm:openai", "llm:gemini"):
         provider = spec.detector.removeprefix("llm:")
         return LLMDetector(load_prompt(prompts / "llm.md"), provider, spec.model_id)
-    if spec.detector in ("random_forest", "isolation_forest"):
-        # The one-hot vocabulary comes from the whole pool, never from the Examples, and both forests encode a Flow the same way.
+    if spec.detector in ("random_forest", "isolation_forest", "offline"):
+        # The one-hot vocabulary comes from the whole pool, never from the Examples, and every forest encodes a Flow the same way.
         pool = dataset.load_split(config["dir"] / "pool.csv", config)
+        vocabulary = random_forest.vocabulary(pool, config)
+        if spec.detector == "offline":
+            # The stand-in wears a Context's hash; here, outside the Arena, that Context is the committed template itself.
+            return OfflineDetector(load_prompt(prompts / "jev.json"), vocabulary, config["benign"])
         forest = RandomForestDetector if spec.detector == "random_forest" else IsolationForestDetector
-        return forest(random_forest.vocabulary(pool, config), config["benign"])
+        return forest(vocabulary, config["benign"])
     raise NotImplementedError(f"detector {spec.detector!r} is not implemented")
 
 
@@ -98,10 +103,10 @@ def check_spec(spec: RunSpec, detector_name: str) -> None:
     k = all exists only for the two forests; the Random Forest cannot train on nothing at k = 0, and the Isolation Forest learns from the
     benign pool alone, so it runs at k = all only.
     """
-    if None in spec.k_values and detector_name not in ("random_forest", "isolation_forest"):
+    if None in spec.k_values and detector_name not in ("random_forest", "isolation_forest", "offline"):
         raise ValueError("k = all is only meaningful for the Random Forest and the Isolation Forest")
-    if detector_name == "random_forest" and 0 in spec.k_values:
-        raise ValueError("the Random Forest starts at k = 1")
+    if detector_name in ("random_forest", "offline") and 0 in spec.k_values:
+        raise ValueError(f"the {detector_name} detector fits a forest on the Examples and starts at k = 1")
     if detector_name == "isolation_forest" and spec.k_values != (None,):
         raise ValueError("the Isolation Forest runs at k = all only")
 
