@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +75,10 @@ def test_expired_token_is_refreshed_and_saved(tmp_path: Path, monkeypatch: pytes
     saved = json.loads(store.path.read_text())
     assert saved["refresh_token"] == "r2"  # noqa: S105
     assert saved["expires_at"] == 1_900_000_000.0
-    assert oct(store.path.stat().st_mode & 0o777) == "0o600"
+    # The token file is chmod 0o600 so that other local users cannot read it. Windows does not implement the POSIX mode bits and reports
+    # 0o666 whatever `chmod` asked for, so the guarantee, and this assertion, only exist on POSIX.
+    if os.name != "nt":
+        assert oct(store.path.stat().st_mode & 0o777) == "0o600"
 
 
 def unauthorized(*_args: object, **_kwargs: object) -> FakeResponse:
