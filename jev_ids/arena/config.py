@@ -77,7 +77,7 @@ class AttackerSettings:
     flows_per_round: int = 20
     max_queries_per_flow: int = 30
     observes: str = "verdict"
-    categories: tuple[str, ...] = ("r2l",)
+    categories: tuple[str, ...] = ("r2l", "probe")
 
 
 @dataclass(frozen=True)

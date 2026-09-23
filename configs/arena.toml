@@ -24,7 +24,12 @@ kind = "mimicry"           # "mimicry" moves a Flow toward benign traffic, "llm"
 flows_per_round = 20       # attack Flows attacked in one Round
 max_queries_per_flow = 30  # Detector calls the attacker may spend on one Flow before giving up on it
 observes = "verdict"       # what the attacker is told back: "verdict" alone or the whole "p_attack"
-categories = ["r2l"]       # the Categories whose Flows are attacked
+# The Categories whose Flows are attacked. Two, on purpose, because they have very different room to move and the contrast is the
+# result: 69.3% of the arena split's r2l Flows already sit at count = 1, so slowing down is not a lever there at all, against 37.5% for
+# probe (measured on data/nsl-kdd/splits/arena.csv). r2l is the delimited interaction the report analyses; probe is the control that
+# says whether a thin evasion rate means the defence is strong or only that the Category had nowhere to go. Probe is also the behaviour
+# the host-based dst_host_* block was built to catch, by the KDD Cup 1999 task description's own account.
+categories = ["r2l", "probe"]
 
 [curator]
 # Who rewrites the Detector's Context between Rounds.
