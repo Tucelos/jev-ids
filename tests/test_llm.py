@@ -7,6 +7,7 @@ from agno.metrics import RunMetrics
 from agno.models.deepseek import DeepSeek
 from agno.models.google import Gemini
 from agno.run.agent import RunOutput
+from agno.run.base import RunStatus
 
 from jev_ids.detectors import chatgpt, llm
 from jev_ids.run import sample_examples
@@ -117,6 +118,15 @@ def test_provider_errors_are_recorded_not_retried(
     prediction = llm.LLMDetector(LLM_PROMPT, "deepseek").predict(FLOW, [])
     assert prediction == {"error": "RuntimeError: 503 busy"}
     assert len(fake_agent.built) == 1
+
+
+def test_a_failed_run_is_a_provider_error_and_not_a_parse_error(
+    fake_agent: type[FakeAgent],
+) -> None:
+    # agno 3.0.10 returns the provider's failure instead of raising it, so only the status tells the two apart.
+    fake_agent.outcomes = [RunOutput(content="Error code: 503 - Service Unavailable", status=RunStatus.error)]
+    prediction = llm.LLMDetector(LLM_PROMPT, "deepseek").predict(FLOW, [])
+    assert prediction == {"error": "provider: Error code: 503 - Service Unavailable"}
 
 
 def test_chatgpt_path_uses_strict_schema_and_the_preamble(

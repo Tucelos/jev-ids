@@ -24,6 +24,7 @@ from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
 from agno.models.google import Gemini
 from agno.run.agent import RunOutput
+from agno.run.base import RunStatus
 from pydantic import BaseModel, Field
 
 from jev_ids.dataset import Flow
@@ -86,6 +87,11 @@ class LLMDetector:
             run: RunOutput = agent.run(f"Record:\n{flow.attributes_csv}")
         except Exception as exc:  # every provider error is recorded, not raised
             return {"error": f"{type(exc).__name__}: {exc}"[:500]}
+        # agno 3.0.10 swallows a provider error on a non-streaming run: `_run` catches it, sets the status to ERROR, puts the message in
+        # `content` and returns; the `except` above never fires. Without this check `measurements` would find no Judgement and file the
+        # provider's own error text as a `parse:` row, which reads like a model that cannot follow a schema.
+        if run.status == RunStatus.error:
+            return {"error": f"provider: {run.content!s}"[:500]}
         return measurements(run, (time.perf_counter() - started) * 1000)
 
 
